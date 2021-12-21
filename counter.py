@@ -77,9 +77,10 @@ for file in file_names:
             
             #If there is a positive neigbour, set this to positive
             elif (img_blur[i,k]>T1 and neigbours.max() >=T2):
-                img[i,k,1] = 255
                 img_blur[i,k] = 255
 
+    #Use img_blur as a mask to highlight colonies on teh original image
+    img[img_blur>0] = [0,255,0]
 
     '''            
     #Apply dynamic thresholding
@@ -87,4 +88,4 @@ for file in file_names:
     '''
 
     #Write the final image
-    cv2.imwrite(processed_path+'/'+file, img_blur)
+    cv2.imwrite(processed_path+'/'+file, img)
