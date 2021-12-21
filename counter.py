@@ -50,37 +50,36 @@ for file in file_names:
     radius= 0.34*W
 
     #Set everything outside of the ROI to 0
-    circ_mask = create_circular_mask(H, W, (H/2, W/2), radius)
-    img_blur[~circ_mask] = 0
+    mask = create_circular_mask(H, W, (H/2, W/2), radius)
+    img_blur[~mask] = 0
+
+    #Set everything below T1 to 0
+    img_blur[img_blur<T1] = 0
+
+    #Set everything at or above T2 to 0
+    img_blur[img_blur>=T2] = 255
 
     #Do the hysteresis threshold
     for i in range(1,H-1):
         for k in range(1,W-1):
-            #Suppress low pixels
-            if img_blur[i,k] < T1:
+            neigbours = np.array([
+                         img_blur[i-1,k-1], 
+                         img_blur[i,k-1],
+                         img_blur[i-1,k],
+                         img_blur[i+1,k+1],
+                         img_blur[i+1,k],
+                         img_blur[i,k+1],
+                         img_blur[i-1,k+1],
+                         img_blur[i+1,k-1]])
+            #If no neigbour pixel is positive, set this to negative
+            if (img_blur[i,k]<T2 and neigbours.max() <T2):
                 img_blur[i,k] = 0
-
-            #Enhance high pixels
-            elif img_blur[i,k] > T2:
+            
+            #If there is a positive neigbour, set this to positive
+            elif (img_blur[i,k]>T1 and neigbours.max() >=T2):
                 img[i,k,1] = 255
                 img_blur[i,k] = 255
-            
-            #If any of neigbour pixels is positive, set this to positive
-            else:
-                if (   img_blur[i-1,k-1] > T2 or
-                       img_blur[i,k-1] > T2 or
-                       img_blur[i-1,k] > T2 or
-                       img_blur[i+1,k+1] > T2 or
-                       img_blur[i+1,k] > T2 or
-                       img_blur[i,k+1] > T2 or
-                       img_blur[i-1,k+1] > T2 or
-                       img_blur[i+1,k-1] > T2
-                    ):
-                    img[i,k,1] = 255
-                    img_blur[i,k] = 255
-                #If no neigbour pixel is positive, set this to negative
-                else:
-                    img_blur[i,k] = 0
+
 
     '''            
     #Apply dynamic thresholding
@@ -88,4 +87,4 @@ for file in file_names:
     '''
 
     #Write the final image
-    cv2.imwrite(processed_path+'/'+file, img)
+    cv2.imwrite(processed_path+'/'+file, img_blur)
