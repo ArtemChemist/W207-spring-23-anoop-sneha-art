@@ -31,6 +31,17 @@ def create_circular_mask(h, w, center=None, radius=None):
     mask = dist_from_center_sq <= radius_sq
     return mask
 
+def define_circular_ROI(image):
+    
+    H, W = image.shape[:2]
+    Y = H/2
+    X = W/2
+
+    radius= 0.34*W
+    
+    return Y,X,radius
+
+
 #Everything below T1 is background, everything above T2 is colony
 T1 = 60
 T2 = 100
@@ -46,11 +57,11 @@ for file in file_names:
     img_blur = cv2.medianBlur(img_gray,17)
 
     #Define the center and the radius of the ROI
-    H, W = img_blur.shape
-    radius= 0.34*W
+    X_cent, Y_cent, Rad = define_circular_ROI(img_blur)
 
     #Set everything outside of the ROI to 0
-    mask = create_circular_mask(H, W, (H/2, W/2), radius)
+    H,W = img_blur.shape[:2]
+    mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
     img_blur[~mask] = 0
 
     #Set everything below T1 to 0
