@@ -46,6 +46,35 @@ def define_circular_ROI(image):
 T1 = 60
 T2 = 100
 
+# Setup SimpleBlobDetector parameters.
+params = cv2.SimpleBlobDetector_Params()
+
+#Change thresholds
+params.minThreshold = 10
+params.maxThreshold = 250
+params.thresholdStep = 10
+#params.minDistBetweenBlobs = 10
+
+# Filter by Area.
+#params.filterByArea = True
+#params.minArea = 1500
+
+# Filter by Circularity
+#params.filterByCircularity = True
+#params.minCircularity = 0.1
+
+# Filter by Convexity
+#params.filterByConvexity = True
+#params.minConvexity = 0.87
+
+# Filter by Inertia
+#params.filterByInertia = True
+#params.minInertiaRatio = 0.01
+
+# Create a detector with the parameters
+# OLD: detector = cv2.SimpleBlobDetector(params)
+detector = cv2.SimpleBlobDetector_create(params)
+
 for file in file_names:
     #Read the image images
     img = cv2.imread(folder_path+'/'+file)
@@ -54,7 +83,7 @@ for file in file_names:
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     #Filter out dust and pepper
-    img_blur = cv2.medianBlur(img_gray,17)
+    img_blur = cv2.medianBlur(img_gray,1)
 
     #Define the center and the radius of the ROI
     X_cent, Y_cent, Rad = define_circular_ROI(img_blur)
@@ -64,39 +93,13 @@ for file in file_names:
     mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
     img_blur[~mask] = 0
 
-    #Set everything below T1 to 0
-    img_blur[img_blur<T1] = 0
+	# Detect blobs.
+    keypnts = detector.detect(img_blur)
+    print('{} has {} blobs'.format(file.split('.')[0], len(keypnts)))
 
-    #Set everything at or above T2 to 0
-    img_blur[img_blur>=T2] = 255
-
-    #Do the hysteresis threshold
-    for i in range(1,H-1):
-        for k in range(1,W-1):
-            neigbours = np.array([
-                         img_blur[i-1,k-1], 
-                         img_blur[i,k-1],
-                         img_blur[i-1,k],
-                         img_blur[i+1,k+1],
-                         img_blur[i+1,k],
-                         img_blur[i,k+1],
-                         img_blur[i-1,k+1],
-                         img_blur[i+1,k-1]])
-            #If no neigbour pixel is positive, set this to negative
-            if (img_blur[i,k]<T2 and neigbours.max() <T2):
-                img_blur[i,k] = 0
-            
-            #If there is a positive neigbour, set this to positive
-            elif (img_blur[i,k]>T1 and neigbours.max() >=T2):
-                img_blur[i,k] = 255
-
-    #Use img_blur as a mask to highlight colonies on teh original image
-    img[img_blur>0] = [0,255,0]
-
-    '''            
-    #Apply dynamic thresholding
-    niBlack = cv2.ximgproc.niBlackThreshold(img_blur, 255, cv2.THRESH_BINARY, 101,0.7,cv2.ximgproc.BINARIZATION_NIBLACK)
-    '''
-
+	# Draw detected blobs as red circles.
+	# cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
+    im_with_keys = cv2.drawKeypoints(img, keypnts, np.array([]), (0,255,0), cv2.DrawMatchesFlags_DRAW_RICH_KEYPOINTS)
+	
     #Write the final image
-    cv2.imwrite(processed_path+'/'+file, img)
+    cv2.imwrite(processed_path+'/'+file, im_with_keys)
