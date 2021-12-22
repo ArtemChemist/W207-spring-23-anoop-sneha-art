@@ -50,29 +50,33 @@ T2 = 100
 params = cv2.SimpleBlobDetector_Params()
 
 #Change thresholds
-params.minThreshold = 10
-params.maxThreshold = 250
-params.thresholdStep = 10
-#params.minDistBetweenBlobs = 10
+params.minThreshold = 50
+params.maxThreshold = 150
+params.thresholdStep = 2
+params.minDistBetweenBlobs = 10
+
 
 # Filter by Area.
-#params.filterByArea = True
-#params.minArea = 1500
+params.filterByArea = True
+params.minArea = 100
 
 # Filter by Circularity
-#params.filterByCircularity = True
-#params.minCircularity = 0.1
+params.filterByCircularity = False
+params.minCircularity = 0.1
 
 # Filter by Convexity
-#params.filterByConvexity = True
+params.filterByConvexity = False
 #params.minConvexity = 0.87
 
 # Filter by Inertia
-#params.filterByInertia = True
+params.filterByInertia = False
+#params.minInertiaRatio = 0.01
+
+# Filter by Color
+params.filterByColor = False
 #params.minInertiaRatio = 0.01
 
 # Create a detector with the parameters
-# OLD: detector = cv2.SimpleBlobDetector(params)
 detector = cv2.SimpleBlobDetector_create(params)
 
 for file in file_names:
@@ -83,7 +87,7 @@ for file in file_names:
     img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
 
     #Filter out dust and pepper
-    img_blur = cv2.medianBlur(img_gray,1)
+    img_blur = cv2.medianBlur(img,7)
 
     #Define the center and the radius of the ROI
     X_cent, Y_cent, Rad = define_circular_ROI(img_blur)
@@ -99,7 +103,7 @@ for file in file_names:
 
 	# Draw detected blobs as red circles.
 	# cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
-    im_with_keys = cv2.drawKeypoints(img, keypnts, np.array([]), (0,255,0), cv2.DrawMatchesFlags_DRAW_RICH_KEYPOINTS)
+    im_with_keys = cv2.drawKeypoints(img, keypnts, np.array([]), (0,255,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 	
     #Write the final image
     cv2.imwrite(processed_path+'/'+file, im_with_keys)
