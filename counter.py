@@ -37,7 +37,7 @@ def define_circular_ROI(image):
     Y = H/2
     X = W/2
 
-    radius= 0.34*W
+    radius= 0.37*W
     
     return Y,X,radius
 
@@ -48,33 +48,38 @@ T2 = 100
 
 # Setup SimpleBlobDetector parameters.
 params = cv2.SimpleBlobDetector_Params()
-
+ 
 #Change thresholds
-params.minThreshold = 50
+params.minThreshold = 40
 params.maxThreshold = 150
-params.thresholdStep = 2
-params.minDistBetweenBlobs = 10
+params.thresholdStep = 3
+params.minDistBetweenBlobs = 5
+params.minRepeatability = 7
 
 
 # Filter by Area.
 params.filterByArea = True
-params.minArea = 100
+params.minArea = 250
+params.maxArea = 5000000
 
-# Filter by Circularity
-params.filterByCircularity = False
-params.minCircularity = 0.1
+# Filter by CircularityTrue
+params.filterByCircularity = True
+params.minCircularity = 0.25
+params.maxCircularity = 0.99
 
 # Filter by Convexity
-params.filterByConvexity = False
-#params.minConvexity = 0.87
+params.filterByConvexity = True
+params.minConvexity = 0.2
+params.maxConvexity = 0.99
 
 # Filter by Inertia
-params.filterByInertia = False
-#params.minInertiaRatio = 0.01
+params.filterByInertia = True
+params.minInertiaRatio = 0.05
+params.maxInertiaRatio = 0.99
 
 # Filter by Color
-params.filterByColor = False
-#params.minInertiaRatio = 0.01
+params.filterByColor = True
+params.blobColor = 255
 
 # Create a detector with the parameters
 detector = cv2.SimpleBlobDetector_create(params)
@@ -83,26 +88,19 @@ for file in file_names:
     #Read the image images
     img = cv2.imread(folder_path+'/'+file)
 
-    #Conver to grayscale
-    img_gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-    #Filter out dust and pepper
-    img_blur = cv2.medianBlur(img,7)
-
     #Define the center and the radius of the ROI
-    X_cent, Y_cent, Rad = define_circular_ROI(img_blur)
+    X_cent, Y_cent, Rad = define_circular_ROI(img)
 
     #Set everything outside of the ROI to 0
-    H,W = img_blur.shape[:2]
+    H,W = img.shape[:2]
     mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
-    img_blur[~mask] = 0
+    img[~mask] = 0
 
 	# Detect blobs.
-    keypnts = detector.detect(img_blur)
+    keypnts = detector.detect(img)
     print('{} has {} blobs'.format(file.split('.')[0], len(keypnts)))
 
 	# Draw detected blobs as red circles.
-	# cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS ensures the size of the circle corresponds to the size of blob
     im_with_keys = cv2.drawKeypoints(img, keypnts, np.array([]), (0,255,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 	
     #Write the final image
