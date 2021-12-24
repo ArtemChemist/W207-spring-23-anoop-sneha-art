@@ -28,7 +28,9 @@ def create_circular_mask(h, w, center=None, radius=None):
     Y, X = np.ogrid[:h, :w]
     dist_from_center_sq = (X - center[0])**2 + (Y-center[1])**2
 
-    mask = dist_from_center_sq <= radius_sq
+    base_cond = dist_from_center_sq <= radius_sq
+    mask = np.array(np.where(base_cond, 255, 0), dtype=np.uint8)
+
     return mask
 
 def define_circular_ROI(image):
@@ -79,7 +81,7 @@ def Setup_Blob_Detector():
 
     return params
 
-def alignImages(im1, im2, name):
+def alignImages(im1, im2, msk, name):
     #I poached this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
     # Convert images to grayscale
     im1Gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
@@ -87,8 +89,8 @@ def alignImages(im1, im2, name):
 
     # Detect ORB features and compute descriptors.
     orb = cv2.ORB_create(MAX_FEATURES)
-    keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, None)
-    keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, None)
+    keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, mask=msk)
+    keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, mask=msk)
 
     # Match features.
     matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
@@ -115,13 +117,16 @@ def alignImages(im1, im2, name):
         points2[i, :] = keypoints2[match.trainIdx].pt
 
     # Find homography
-    h, mask = cv2.findHomography(points1, points2, cv2.RANSAC,ransacReprojThreshold=5.0)
+    if len(points1) >=4 and len(points2)>=4:
+        h, mask_1 = cv2.findHomography(points1, points2, cv2.RANSAC,ransacReprojThreshold=5.0)
+    else:
+        return im1, []
 
     if h is not None:
 
         # Use homography
         height, width, channels = im2.shape
-        im1Reg = cv2.warpPerspective(im1, h, (height, width), np.array([]))
+        im1Reg = cv2.Perspective(im1, h, (height, width), np.array([]))
 
         return im1Reg, h
 
@@ -150,13 +155,12 @@ for file in file_names:
     #Set everything outside of the ROI to 0
     H,W = img.shape[:2]
     mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
-    #img[~mask] = 0
 
     print("Aligning images ...")
 
     # Registered image will be sotred in imReg.
     # The estimated homography will be stored in h.
-    imReg, h = alignImages(img, imReference, file)
+    imReg, h = alignImages(img, imReference, mask, file)
 
 	# Detect blobs.
     keypnts = blob_detector.detect(imReg)
