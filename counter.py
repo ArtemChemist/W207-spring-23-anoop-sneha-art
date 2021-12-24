@@ -43,6 +43,87 @@ def define_circular_ROI(image):
     
     return Y,X,radius
 
+#Thesea re the parameters that we are going to use
+accum_res  = 2 # image resolution/accum resolution
+min_between = 5 #Min dist between circles. 
+minRadius = 530 #Min radius of a circle. 
+maxRadius= 680 #The bigest circle expected
+Canny_thr = 100 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
+Accum_thr = 75 #accumulator threshold for the circle centers at the detection stage
+
+params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
+
+def ScaleImage(image):
+    #resize image to ~1500x1500
+    Width = image.shape[1]
+    Scale = Width/1500
+    new_size = (int(image.shape[1]/Scale), int(image.shape[0]/Scale)) 
+    img_resized = cv2.resize(image, new_size )
+    return img_resized
+
+def FindCircles(params, scaled_img):
+
+    #Convert to grayscale
+    img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
+
+    #Gausian filetr noise
+    filtered = cv2.medianBlur(img_gr, 3)
+    filtered[filtered<120] = 120
+     #Run Hough circle with the params tailored to find big circles.
+    circs = cv2.HoughCircles(image = filtered, 
+                    method = cv2.HOUGH_GRADIENT,
+                    dp = params[0],
+                    minDist = params[1],
+                    param1 = params[2], param2 = params[3],
+                    minRadius = params[4], maxRadius = params[5])
+    #Round all numbers to the nearst int                
+    if circs is not None:
+        circs = np.uint16(np.around(circs))
+        return circs[0,:], filtered
+    else:
+        return [], filtered
+
+def DrawCircles(circle_array, target):
+
+    #Find the median center
+    vector_dict = []
+    #Calculate the vector length 
+    for circ in circle_array:
+        vector_dict.append(circ[0]**2+circ[1]**2)
+    
+    #Find median vector length
+    median_len = np.median(vector_dict)
+
+    #Find how far away each vector is from median length
+    for circ in vector_dict:
+        circ = abs(circ-median_len)
+    
+    index_min = min(range(len(vector_dict)), key=vector_dict.__getitem__)
+
+    X_mean = circle_array[index_min][0]
+    Y_mean = circle_array[index_min][1]
+
+    #Draw circles and their centers
+    for i in circle_array:
+        if i[0] == X_mean and i[1] == Y_mean:
+            # draw the outer circle
+            cv2.circle(target ,(i[0],i[1]),i[2],(0,0,255),10)
+            # draw the center of the circle
+            cv2.circle(target ,(i[0],i[1]),4,(0,255,0),10)
+            radius_txt = str(i[2])
+            cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
+        '''
+        # draw the outer circle
+        cv2.circle(target ,(i[0],i[1]),i[2],(0,255,0),4)
+        # draw the center of the circle
+        cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
+
+        #Print the radius at the center
+        radius_txt = str(i[2])
+        cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
+        '''
+
+
 def Setup_Blob_Detector():
 
     params = cv2.SimpleBlobDetector_Params()
@@ -82,7 +163,7 @@ def Setup_Blob_Detector():
     return params
 
 def alignImages(im1, im2, msk, name):
-    #I poached this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
+    # I modified this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
     # Convert images to grayscale
     im1Gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
     im2Gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
@@ -115,18 +196,28 @@ def alignImages(im1, im2, msk, name):
     for i, match in enumerate(matches):
         points1[i, :] = keypoints1[match.queryIdx].pt
         points2[i, :] = keypoints2[match.trainIdx].pt
-
+    '''
     # Find homography
     if len(points1) >=4 and len(points2)>=4:
         h, mask_1 = cv2.findHomography(points1, points2, cv2.RANSAC,ransacReprojThreshold=5.0)
     else:
         return im1, []
-
+    '''
+    # Calculate the transformation matrix using cv2.getAffineTransform()
+    points_source = points1[0:3]
+    points_ref = points2[0:3]
+    h= cv2.getAffineTransform(points_source, points_ref)
+    
     if h is not None:
-
-        # Use homography
+        '''
+        # Use homography for Perspective transform
         height, width, channels = im2.shape
-        im1Reg = cv2.Perspective(im1, h, (height, width), np.array([]))
+        im1Reg = cv2.warpPerspective(im1, h, (height, width), np.array([]))
+        '''
+        # Use transformation matrix for affine transform
+        height, width, channels = im2.shape
+        im1Reg = cv2.warpAffine(im1, h, (height, width), np.array([]))
+        
 
         return im1Reg, h
 
@@ -149,12 +240,25 @@ for file in file_names:
     #Read the image
     img = cv2.imread(folder_path+'/'+file)
 
+    #Scale Image
+    img_scaled = ScaleImage(img)
+    
+
+    #Take scaled image, find circles and return a list of circles
+    #Circles, filtered = FindCircles(params_Hough, img_scaled)
+
+
+    #Draw the circles on the image provided
+    #if len(Circles)>0:
+     #   DrawCircles(Circles, filtered)
+
     #Define the center and the radius of the ROI
     X_cent, Y_cent, Rad = define_circular_ROI(img)
 
-    #Set everything outside of the ROI to 0
+    #Create a mask that is 255 everywhere where we should look
     H,W = img.shape[:2]
     mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
+
 
     print("Aligning images ...")
 
@@ -163,11 +267,11 @@ for file in file_names:
     imReg, h = alignImages(img, imReference, mask, file)
 
 	# Detect blobs.
-    keypnts = blob_detector.detect(imReg)
-    print('{} has {} blobs'.format(file.split('.')[0], len(keypnts)))
+    #keypnts = blob_detector.detect(imReg)
+    #print('{} has {} blobs'.format(file.split('.')[0], len(keypnts)))
 
 	# Draw detected blobs as red circles.
-    im_with_keys = cv2.drawKeypoints(imReg, keypnts, np.array([]), (0,255,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    #im_with_keys = cv2.drawKeypoints(imReg, keypnts, np.array([]), (0,255,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
 	
     #Write the final image
-    cv2.imwrite(processed_path+'/'+file, im_with_keys)
+    cv2.imwrite(processed_path+'/'+file, imReg)
