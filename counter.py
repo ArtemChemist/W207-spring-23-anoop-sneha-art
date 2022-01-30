@@ -45,12 +45,12 @@ def define_circular_ROI(image):
     return Y,X,radius
 
 #Thesea re the parameters that we are going to use
-accum_res  = 3 # image resolution/accum resolution
-min_between = 5 #Min dist between circles. 
-minRadius = 600 #Min radius of a circle. 
-maxRadius= 680 #The bigest circle expected
-Canny_thr = 300 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 100 #accumulator threshold for the circle centers at the detection stage
+accum_res  = 4 # image resolution/accum resolution
+min_between = 30 #Min dist between circles. 
+minRadius = 610 #Min radius of a circle. 
+maxRadius= 750 #The bigest circle expected
+Canny_thr = 800 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
+Accum_thr = 800 #accumulator threshold for the circle centers at the detection stage
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
@@ -131,7 +131,7 @@ def DrawCircles(circle_array, target):
         cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
     #Print number of circles
     num_cir = str(len(circle_array))
-    cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 10, (150, 150, 0), 10)
+    cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
         
 
 def Setup_Blob_Detector():
@@ -256,7 +256,7 @@ for file in file_names:
 
     #Take scaled image, find circles and return a list of circles
     Circles, leveled = FindCircles(params_Hough, img_scaled)
-
+    print(f"{file[0:-4]} {len(Circles):10}")
 
     #Draw the circles on the image provided
     if len(Circles)>0:
