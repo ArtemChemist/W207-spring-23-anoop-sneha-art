@@ -133,6 +133,37 @@ def DrawCircles(circle_array, target):
     num_cir = str(len(circle_array))
     cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
         
+def Circ_Integral(image = np.array, center = (int,int), radius = int, width = int):
+    return 10
+
+def Intensity_f_R(image= np.array, center = (int, int), max_radius = int, step = int):
+    band = max_radius//step
+    arr = [   Circ_Integral(image, center, i, band)    for i in range(center[0], center[0]+max_radius, step) ]
+    return arr
+
+def Deriv(F = np.array):
+    pass
+
+def FindBestCircle(circles, image):
+    for circle in circles:
+        #Find the max radius that can possibly be at this cneter point
+        #For this find how far away this point is from the center of the image
+        #Then take the dimention with the largest offset and say the max radius is dimention-offset
+        Y_offset = abs(image.shape[1]//2-circle[1])
+        X_offset = abs(image.shape[0]//2-circle[0])
+        max_R = 0
+        if X_offset > Y_offset:
+            max_R = image.shape[0]//2-X_offset
+        else:
+            max_R = image.shape[1]//2-Y_offset
+
+        #print(f'X: {circle[0]} Y: {circle[1]} X_offset: {X_offset} Y_offset: {Y_offset} R: {max_R}')
+        #cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),2)
+
+        Int_f_R = Intensity_f_R(image,  (circle[0], circle[1]), max_R, 25)
+        print(Int_f_R)
+
+    pass
 
 def Setup_Blob_Detector():
 
@@ -252,7 +283,6 @@ for file in file_names:
 
     #Scale Image
     img_scaled = ScaleImage(img)
-    
 
     #Take scaled image, find circles and return a list of circles
     Circles, leveled = FindCircles(params_Hough, img_scaled)
@@ -261,6 +291,14 @@ for file in file_names:
     #Draw the circles on the image provided
     if len(Circles)>0:
         DrawCircles(Circles, img_scaled)
+        FindBestCircle(Circles, leveled)
+
+    # In the list of centers, find the right center
+    # That is, the one that defines the best defined circle
+    # That is the circle with the sharpest brigtnest change
+    # Brightness = integral of brighness over circumference
+    # Brightness change = its derivative radius
+    # I.e. df/dr, where f = integral(intesity)*d(circ)  
 	
     #Write the image with circles
     cv2.imwrite(processed_path+'/'+file, img_scaled)
