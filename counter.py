@@ -1,3 +1,4 @@
+from cmath import sin
 import matplotlib as plt
 import numpy as np
 import cv2
@@ -45,7 +46,7 @@ def define_circular_ROI(image):
     return Y,X,radius
 
 #Thesea re the parameters that we are going to use
-accum_res  = 4 # image resolution/accum resolution
+accum_res  = 5 # image resolution/accum resolution
 min_between = 30 #Min dist between circles. 
 minRadius = 610 #Min radius of a circle. 
 maxRadius= 750 #The bigest circle expected
@@ -91,7 +92,7 @@ def FindCircles(params, scaled_img):
         return [], img_contrast
 
 def DrawCircles(circle_array, target):
-
+    '''
     #Find the median center
     vector_dict = []
     #Calculate the vector length 
@@ -109,7 +110,7 @@ def DrawCircles(circle_array, target):
 
     X_mean = circle_array[index_min][0]
     Y_mean = circle_array[index_min][1]
-
+    '''
     #Draw circles and their centers
     for i in circle_array:
         '''
@@ -133,37 +134,55 @@ def DrawCircles(circle_array, target):
     num_cir = str(len(circle_array))
     cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
         
-def Circ_Integral(image = np.array, center = (int,int), radius = int, width = int):
-    return 10
+def Circ_Integral(image = np.array, center = (int,int), radius = int):
+    sum_intensities = 0
+    for angle in np.arange(0, 2*math.pi, math.pi/200):
+        x_at_angel = center[0]+ int(radius*math.cos(angle))
+        y_at_angel = center[1]+ int(radius*math.sin(angle))
+        sum_intensities+=image[y_at_angel,x_at_angel]
+        #cv2.circle(image,(x_at_angel,y_at_angel),1,(255,255,255),2)
+    return sum_intensities
 
-def Intensity_f_R(image= np.array, center = (int, int), max_radius = int, step = int):
-    band = max_radius//step
-    arr = [   Circ_Integral(image, center, i, band)    for i in range(center[0], center[0]+max_radius, step) ]
-    return arr
+def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
+    
+    #First Calucalte how integral brightness of the circles dpends on their radius
+    #Do that starting from fairly large radius, to start close to the edge already
+    Intensity_f_R = [   Circ_Integral(image, center, i)    for i in range(min_radius, max_radius, step) ]
+    
+    # Now calculate derivative of this function
+    
+    Deriv = []
+    for i in range(0, len(Intensity_f_R)-1):
+        Deriv.append(Intensity_f_R[i+1]-Intensity_f_R[i])
 
-def Deriv(F = np.array):
-    pass
+    #return this reriative
+    return Deriv
 
 def FindBestCircle(circles, image):
+    Circles_dict = {}
     for circle in circles:
         #Find the max radius that can possibly be at this cneter point
         #For this find how far away this point is from the center of the image
         #Then take the dimention with the largest offset and say the max radius is dimention-offset
-        Y_offset = abs(image.shape[1]//2-circle[1])
-        X_offset = abs(image.shape[0]//2-circle[0])
-        max_R = 0
-        if X_offset > Y_offset:
-            max_R = image.shape[0]//2-X_offset
-        else:
-            max_R = image.shape[1]//2-Y_offset
-
+        #Keep in mind that image.shape[height, width], but circle[x,y,r]
+        Y_offset = abs(image.shape[0]/2-circle[1])
+        X_offset = abs(image.shape[1]/2-circle[0])
+        max_X = int(image.shape[1]/2-X_offset)
+        max_Y = int(image.shape[0]/2-Y_offset)
+        max_R = min(max_X, max_Y)
+        
         #print(f'X: {circle[0]} Y: {circle[1]} X_offset: {X_offset} Y_offset: {Y_offset} R: {max_R}')
-        #cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),2)
-
-        Int_f_R = Intensity_f_R(image,  (circle[0], circle[1]), max_R, 25)
-        print(Int_f_R)
-
-    pass
+        cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),1)
+        #print(f'Shape: {image.shape} Y,X {circle[1]}, {circle[0]} Max Y: {circle[1]+max_R} Max X: {circle[0]+max_R}')
+        
+        Deriv_Step = 20
+        Deriv_f_R = Deriv_Intensity_f_R(image,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
+        MaxDeriv = max(Deriv_f_R)
+        R_of_Max = 500 + Deriv_f_R.index(MaxDeriv)*Deriv_Step
+        print(f"MaxDeriv: {MaxDeriv} R: {R_of_Max}")
+        Circles_dict[MaxDeriv]=(circle[0], circle[1],R_of_Max)
+    Brightest = max(Circles_dict.keys())
+    return [Circles_dict[Brightest]]
 
 def Setup_Blob_Detector():
 
@@ -290,9 +309,8 @@ for file in file_names:
 
     #Draw the circles on the image provided
     if len(Circles)>0:
-        DrawCircles(Circles, img_scaled)
-        FindBestCircle(Circles, leveled)
-
+        BestCirc = FindBestCircle(Circles, leveled)
+        DrawCircles(BestCirc, img_scaled)
     # In the list of centers, find the right center
     # That is, the one that defines the best defined circle
     # That is the circle with the sharpest brigtnest change
