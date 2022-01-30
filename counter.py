@@ -2,6 +2,7 @@ import matplotlib as plt
 import numpy as np
 import cv2
 import os
+import math
 from skimage import data, filters
 
 #get a list of files in the folder with pics
@@ -44,12 +45,12 @@ def define_circular_ROI(image):
     return Y,X,radius
 
 #Thesea re the parameters that we are going to use
-accum_res  = 2 # image resolution/accum resolution
+accum_res  = 3 # image resolution/accum resolution
 min_between = 5 #Min dist between circles. 
-minRadius = 530 #Min radius of a circle. 
+minRadius = 600 #Min radius of a circle. 
 maxRadius= 680 #The bigest circle expected
-Canny_thr = 100 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 75 #accumulator threshold for the circle centers at the detection stage
+Canny_thr = 300 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
+Accum_thr = 100 #accumulator threshold for the circle centers at the detection stage
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
@@ -68,9 +69,15 @@ def FindCircles(params, scaled_img):
 
     #Gausian filetr noise
     filtered = cv2.medianBlur(img_gr, 3)
-    filtered[filtered<120] = 120
-     #Run Hough circle with the params tailored to find big circles.
-    circs = cv2.HoughCircles(image = filtered, 
+    
+    #Enhance contrast
+    lookUpTable = np.empty((1,256), np.uint8)
+    for i in range(256):
+        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.15*(-i+107))    ))
+
+    img_contrast = cv2.LUT(filtered, lookUpTable)    
+    #Run Hough circle with the params tailored to find big circles.
+    circs = cv2.HoughCircles(image = img_contrast, 
                     method = cv2.HOUGH_GRADIENT,
                     dp = params[0],
                     minDist = params[1],
@@ -79,9 +86,9 @@ def FindCircles(params, scaled_img):
     #Round all numbers to the nearst int                
     if circs is not None:
         circs = np.uint16(np.around(circs))
-        return circs[0,:], filtered
+        return circs[0,:], img_contrast
     else:
-        return [], filtered
+        return [], img_contrast
 
 def DrawCircles(circle_array, target):
 
@@ -105,6 +112,7 @@ def DrawCircles(circle_array, target):
 
     #Draw circles and their centers
     for i in circle_array:
+        '''
         if i[0] == X_mean and i[1] == Y_mean:
             # draw the outer circle
             cv2.circle(target ,(i[0],i[1]),i[2],(0,0,255),10)
@@ -121,8 +129,10 @@ def DrawCircles(circle_array, target):
         #Print the radius at the center
         radius_txt = str(i[2])
         cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
-        '''
-
+    #Print number of circles
+    num_cir = str(len(circle_array))
+    cv2.putText(target, num_cir, (50,50), cv2.FONT_HERSHEY_PLAIN, 20 (150, 150, 0), 5)
+        
 
 def Setup_Blob_Detector():
 
@@ -245,33 +255,15 @@ for file in file_names:
     
 
     #Take scaled image, find circles and return a list of circles
-    #Circles, filtered = FindCircles(params_Hough, img_scaled)
+    Circles, leveled = FindCircles(params_Hough, img_scaled)
 
 
     #Draw the circles on the image provided
-    #if len(Circles)>0:
-     #   DrawCircles(Circles, filtered)
-
-    #Define the center and the radius of the ROI
-    X_cent, Y_cent, Rad = define_circular_ROI(img)
-
-    #Create a mask that is 255 everywhere where we should look
-    H,W = img.shape[:2]
-    mask = create_circular_mask(H, W, (X_cent, Y_cent), Rad)
-
-
-    print("Aligning images ...")
-
-    # Registered image will be sotred in imReg.
-    # The estimated homography will be stored in h.
-    imReg, h = alignImages(img, imReference, mask, file)
-
-	# Detect blobs.
-    #keypnts = blob_detector.detect(imReg)
-    #print('{} has {} blobs'.format(file.split('.')[0], len(keypnts)))
-
-	# Draw detected blobs as red circles.
-    #im_with_keys = cv2.drawKeypoints(imReg, keypnts, np.array([]), (0,255,0), cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
+    if len(Circles)>0:
+        DrawCircles(Circles, img_scaled)
 	
-    #Write the final image
-    cv2.imwrite(processed_path+'/'+file, imReg)
+    #Write the image with circles
+    cv2.imwrite(processed_path+'/'+file, img_scaled)
+    #Write the pre-processed image
+    cv2.imwrite(processed_path+'/'+file+'_proc', leveled)
+
