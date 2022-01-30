@@ -131,7 +131,7 @@ def DrawCircles(circle_array, target):
         cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
     #Print number of circles
     num_cir = str(len(circle_array))
-    cv2.putText(target, num_cir, (50,50), cv2.FONT_HERSHEY_PLAIN, 20 (150, 150, 0), 5)
+    cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 10, (150, 150, 0), 10)
         
 
 def Setup_Blob_Detector():
