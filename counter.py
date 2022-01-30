@@ -68,14 +68,14 @@ def FindCircles(params, scaled_img):
     img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
 
     #Gausian filetr noise
-    filtered = cv2.medianBlur(img_gr, 3)
+    #filtered = cv2.medianBlur(img_gr, 1)
     
     #Enhance contrast
     lookUpTable = np.empty((1,256), np.uint8)
     for i in range(256):
-        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.15*(-i+107))    ))
+        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.15*(-i+120))    ))
 
-    img_contrast = cv2.LUT(filtered, lookUpTable)    
+    img_contrast = cv2.LUT(img_gr, lookUpTable)    
     #Run Hough circle with the params tailored to find big circles.
     circs = cv2.HoughCircles(image = img_contrast, 
                     method = cv2.HOUGH_GRADIENT,
