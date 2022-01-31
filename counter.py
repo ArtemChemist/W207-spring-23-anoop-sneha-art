@@ -93,15 +93,21 @@ def DrawCircles(circle_array, target):
     #Draw circles and their centers
     for i in circle_array:
 
-        # draw the outer circle
-        cv2.circle(target ,(i[0],i[1]),i[2],(0,255,0),4)
+        if len(i) ==2:
+            # draw the center of the circle
+            cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
+            # Draw the outer circle in red
+            cv2.circle(target ,(i[0],i[1]),500,(0,0,255),8)
 
-        # draw the center of the circle
-        cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
 
-        #Print the radius at the center
-        radius_txt = str(i[2])
-        cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
+        if len(i) ==3:
+            # draw the center of the circle
+            cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
+            # draw the outer circle
+            cv2.circle(target ,(i[0],i[1]),i[2],(0,255,0),4)
+            #Print the radius at the center
+            radius_txt = str(i[2])
+            cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
     
     #Print number of circles
     num_cir = str(len(circle_array))
@@ -120,10 +126,14 @@ def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width
     #Find the x and y coordinates of points on the circle, summ up intensities for all these points
     sum_intensities = 0
     for value in sin_cos:
+
         x_at_angel = center[0]+ int(radius*value[1])
-        y_at_angel = center[1]+ int(radius*value[0])
+        if x_at_angel>=image.shape[1]: x_at_angel = image.shape[1]-1
+
+        y_at_angel = center[1]+ int(radius*value[0])        
+        if y_at_angel>=image.shape[0]: y_at_angel = image.shape[0]-1
+        
         sum_intensities+=image[y_at_angel,x_at_angel]
-        #cv2.circle(image,(x_at_angel,y_at_angel),1,(255,255,255),2)
 
     return sum_intensities
 
@@ -149,11 +159,15 @@ def FindBestCircle(circles, image):
     #Enhance contrast, but not as dramatically as for Hugh transform
     lookUpTable = np.empty((1,256), np.uint8)
     for i in range(256):
-        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.3*(-i+110))    ))
+        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.15*(-i+120))    ))
 
     img_contrast = cv2.LUT(img_gr, lookUpTable)    
 
-    Circles_dict = {}
+    #Lets expand array of circles to store additional infor we find out
+    #[0] - x, [1] - y, [2] - radius, [3] - MaxRadius, [4] - MaxDeriv
+    zeros = np.zeros((circles.shape[0], 3), dtype = int)
+    circles = np.concatenate(  (circles, zeros),  axis = 1)  
+
     for circle in circles:
         #Find the max radius that can possibly be at this cneter point
         #For this find how far away this point is from the center of the image
@@ -163,41 +177,45 @@ def FindBestCircle(circles, image):
         max_X = int(image.shape[1]/2-X_offset)
         max_Y = int(image.shape[0]/2-Y_offset)
         max_R = min(max_X, max_Y)
+        circle[3]=max_R
         
         #Calculate how intensity changes (i.e. derivative) as the radius increases.       
         Deriv_Step = 10
         Deriv_f_R = Deriv_Intensity_f_R(img_contrast,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
         #Find what was the sharpest change for this circle, 
         MaxDeriv = max(Deriv_f_R)
+        circle[4] =  MaxDeriv
         #Find where this sharp change occured
         R_of_Max = 500 + Deriv_f_R.index(MaxDeriv)*Deriv_Step
-        #Add these params for this circle to a dictionary key = MaxDeriv for this circle, value = center, radius 
-        Circles_dict[MaxDeriv]=(circle[0], circle[1],R_of_Max)
+        circle[5] = R_of_Max
 
     #Find the circle that had the most abrupt change.
     #The idea is that as we go out from the most central point will have all LEDs come into view at once
-    #As opposed to point that is off-center, where expanding circle wil hit onle few LEDs at a time.
-    Brightest = max(Circles_dict.keys())
-
+    #As opposed to point that is off-center, where expanding circle wil hit only few LEDs at a time.
+    #For that, sort all circles by the maxDrevi Value
+    sorted_circles = circles[np.argsort(circles[:, 4])]
+    BestCircle = sorted_circles[-1]
 
     #Now that we know where is the true center of the ROI, let's find its true radius.
-    #Print full Deriv for this one circle
-    Deriv_Brightest = Deriv_Intensity_f_R(img_contrast,  (Circles_dict[Brightest][0], Circles_dict[Brightest][1]), 300, max_R, 10)
-    print(Deriv_Brightest)
+    #Get full Deriv for this one circle, all the way to the max possible radius
+    Deriv_Brightest = Deriv_Intensity_f_R(img_contrast,  (BestCircle[0], BestCircle[1]), 500, BestCircle[3], 5)
 
+    #Add center coordinate to the list that we wil return
+    return_value = [BestCircle[0], BestCircle[1]]
 
-    return_value = [Circles_dict[Brightest][0], Circles_dict[Brightest][1]]
-
+    #Go through the deriv and if the point and the next point is above 1500, say that is where ROI stops
+    #Don't forget that we only calculate starting from 500 pixels from the center, so add those 500px
     for i in range(len(Deriv_Brightest)-1):
-        if Deriv_Brightest[i]>1500   and Deriv_Brightest[i+1]>1500:
-            return_value.append(300+i*10)
+        if Deriv_Brightest[i]>1300   and Deriv_Brightest[i+1]>1300:
+            return_value.append(500+i*5)
             break
+    #If this condition was not met, just go and find were derivative was higher than 1500 at least once
     else:
         for i in range(len(Deriv_Brightest)-1):
-            if Deriv_Brightest[i]>2000:
-                return_value.append(300+i*10)
+            if (Deriv_Brightest[i-1]+Deriv_Brightest[i]+Deriv_Brightest[i+1]) > 1500:
+                return_value.append(500+(i-1)*5)
                 break
-
+    
     return [return_value]
 
 def Setup_Blob_Detector():
@@ -324,11 +342,10 @@ for file in file_names:
 
     #Draw the circles on the image provided
     if len(Circles)>0:
-        # In the list of centers, find the right center
-        # That is, the one that defines the best defined circle
-        # That is the circle with the sharpest brigtnest change
+        # In the list of centers, find the center of the true ROI
+        # ROI is the circle with the sharpest brigtnest change
         # Brightness = integral of brighness over circumference
-        # Brightness change = its derivative radius
+        # Brightness change = its derivative on radius
         # I.e. df/dr, where f = integral(intesity)*d(circ) 
         BestCirc = FindBestCircle(Circles, img_scaled)
         DrawCircles(BestCirc, img_scaled)
@@ -336,6 +353,5 @@ for file in file_names:
 	
     #Write the image with circles
     cv2.imwrite(processed_path+'/'+file, img_scaled)
-    #Write the pre-processed image
-    #cv2.imwrite(processed_path+'/'+file+'_proc', leveled)
+
 
