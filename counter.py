@@ -51,7 +51,7 @@ min_between = 15 #Min dist between circles.
 minRadius = 610 #Min radius of a circle. 
 maxRadius= 750 #The bigest circle expected
 Canny_thr = 800 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 850 #accumulator threshold for the circle centers at the detection stage
+Accum_thr = 900 #accumulator threshold for the circle centers at the detection stage
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
@@ -67,9 +67,6 @@ def FindCircles(params, scaled_img):
 
     #Convert to grayscale
     img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
-
-    #Gausian filetr noise
-    #filtered = cv2.medianBlur(img_gr, 1)
     
     #Enhance contrast
     lookUpTable = np.empty((1,256), np.uint8)
@@ -92,62 +89,49 @@ def FindCircles(params, scaled_img):
         return [], img_contrast
 
 def DrawCircles(circle_array, target):
-    '''
-    #Find the median center
-    vector_dict = []
-    #Calculate the vector length 
-    for circ in circle_array:
-        vector_dict.append(circ[0]**2+circ[1]**2)
-    
-    #Find median vector length
-    median_len = np.median(vector_dict)
 
-    #Find how far away each vector is from median length
-    for circ in vector_dict:
-        circ = abs(circ-median_len)
-    
-    index_min = min(range(len(vector_dict)), key=vector_dict.__getitem__)
-
-    X_mean = circle_array[index_min][0]
-    Y_mean = circle_array[index_min][1]
-    '''
     #Draw circles and their centers
     for i in circle_array:
-        '''
-        if i[0] == X_mean and i[1] == Y_mean:
-            # draw the outer circle
-            cv2.circle(target ,(i[0],i[1]),i[2],(0,0,255),10)
-            # draw the center of the circle
-            cv2.circle(target ,(i[0],i[1]),4,(0,255,0),10)
-            radius_txt = str(i[2])
-            cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
-        '''
+
         # draw the outer circle
         cv2.circle(target ,(i[0],i[1]),i[2],(0,255,0),4)
+
         # draw the center of the circle
         cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
 
         #Print the radius at the center
         radius_txt = str(i[2])
         cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
+    
     #Print number of circles
     num_cir = str(len(circle_array))
     cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
         
-def Circ_Integral(image = np.array, center = (int,int), radius = int):
+def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width = int):
+    '''
+    Finds 100 points on circle cnetered at "center" and with radius "radius"
+    Sums up intensities of the "image" at these points.
+    Essentially an integral over circumference
+    '''
+
+    #Calcualte values of sin and cos for each angle we will use, keep in in np.array fro speed
+    sin_cos = np.array(  [   (math.sin(angle), math.cos(angle))    for angle in np.arange(0, 2*math.pi, math.pi/50)     ]        )
+    
+    #Find the x and y coordinates of points on the circle, summ up intensities for all these points
     sum_intensities = 0
-    for angle in np.arange(0, 2*math.pi, math.pi/200):
-        x_at_angel = center[0]+ int(radius*math.cos(angle))
-        y_at_angel = center[1]+ int(radius*math.sin(angle))
+    for value in sin_cos:
+        x_at_angel = center[0]+ int(radius*value[1])
+        y_at_angel = center[1]+ int(radius*value[0])
         sum_intensities+=image[y_at_angel,x_at_angel]
         #cv2.circle(image,(x_at_angel,y_at_angel),1,(255,255,255),2)
+
     return sum_intensities
 
 def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
     
     #First Calucalte how integral brightness of the circles dpends on their radius
     #Do that starting from fairly large radius, to start close to the edge already
-    Intensity_f_R = [   Circ_Integral(image, center, i)    for i in range(min_radius, max_radius, step) ]
+    Intensity_f_R = [   Circ_Integral(image, center, i, step)    for i in range(min_radius, max_radius, step) ]
     
     # Now calculate derivative of this function
     
@@ -159,11 +143,20 @@ def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int,
     return Deriv
 
 def FindBestCircle(circles, image):
+    #Convert to grayscale
+    img_gr = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    
+    #Enhance contrast, but not as dramatically as for Hugh transform
+    lookUpTable = np.empty((1,256), np.uint8)
+    for i in range(256):
+        lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.3*(-i+110))    ))
+
+    img_contrast = cv2.LUT(img_gr, lookUpTable)    
+
     Circles_dict = {}
     for circle in circles:
         #Find the max radius that can possibly be at this cneter point
         #For this find how far away this point is from the center of the image
-
         #Keep in mind that image.shape[height, width], but circle[x,y,r]
         Y_offset = abs(image.shape[0]/2-circle[1])
         X_offset = abs(image.shape[1]/2-circle[0])
@@ -171,18 +164,41 @@ def FindBestCircle(circles, image):
         max_Y = int(image.shape[0]/2-Y_offset)
         max_R = min(max_X, max_Y)
         
-        #print(f'X: {circle[0]} Y: {circle[1]} X_offset: {X_offset} Y_offset: {Y_offset} R: {max_R}')
-        #cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),1)
-        #print(f'Shape: {image.shape} Y,X {circle[1]}, {circle[0]} Max Y: {circle[1]+max_R} Max X: {circle[0]+max_R}')
-        
+        #Calculate how intensity changes (i.e. derivative) as the radius increases.       
         Deriv_Step = 10
-        Deriv_f_R = Deriv_Intensity_f_R(image,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
+        Deriv_f_R = Deriv_Intensity_f_R(img_contrast,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
+        #Find what was the sharpest change for this circle, 
         MaxDeriv = max(Deriv_f_R)
+        #Find where this sharp change occured
         R_of_Max = 500 + Deriv_f_R.index(MaxDeriv)*Deriv_Step
-        #print(f"MaxDeriv: {MaxDeriv} R: {R_of_Max}")
+        #Add these params for this circle to a dictionary key = MaxDeriv for this circle, value = center, radius 
         Circles_dict[MaxDeriv]=(circle[0], circle[1],R_of_Max)
+
+    #Find the circle that had the most abrupt change.
+    #The idea is that as we go out from the most central point will have all LEDs come into view at once
+    #As opposed to point that is off-center, where expanding circle wil hit onle few LEDs at a time.
     Brightest = max(Circles_dict.keys())
-    return [Circles_dict[Brightest]]
+
+
+    #Now that we know where is the true center of the ROI, let's find its true radius.
+    #Print full Deriv for this one circle
+    Deriv_Brightest = Deriv_Intensity_f_R(img_contrast,  (Circles_dict[Brightest][0], Circles_dict[Brightest][1]), 300, max_R, 10)
+    print(Deriv_Brightest)
+
+
+    return_value = [Circles_dict[Brightest][0], Circles_dict[Brightest][1]]
+
+    for i in range(len(Deriv_Brightest)-1):
+        if Deriv_Brightest[i]>1500   and Deriv_Brightest[i+1]>1500:
+            return_value.append(300+i*10)
+            break
+    else:
+        for i in range(len(Deriv_Brightest)-1):
+            if Deriv_Brightest[i]>2000:
+                return_value.append(300+i*10)
+                break
+
+    return [return_value]
 
 def Setup_Blob_Detector():
 
@@ -293,8 +309,7 @@ MAX_FEATURES = 500
 GOOD_MATCH_PERCENT = 0.15
 
 # Read reference image
-refFilename = folder_path+'/'+'Ref.jpg'
-imReference = cv2.imread(refFilename, cv2.IMREAD_COLOR)
+imReference = cv2.imread(folder_path+'/'+'Ref.jpg', cv2.IMREAD_COLOR)
 
 for file in file_names:
     #Read the image
@@ -309,14 +324,15 @@ for file in file_names:
 
     #Draw the circles on the image provided
     if len(Circles)>0:
-        BestCirc = FindBestCircle(Circles, leveled)
+        # In the list of centers, find the right center
+        # That is, the one that defines the best defined circle
+        # That is the circle with the sharpest brigtnest change
+        # Brightness = integral of brighness over circumference
+        # Brightness change = its derivative radius
+        # I.e. df/dr, where f = integral(intesity)*d(circ) 
+        BestCirc = FindBestCircle(Circles, img_scaled)
         DrawCircles(BestCirc, img_scaled)
-    # In the list of centers, find the right center
-    # That is, the one that defines the best defined circle
-    # That is the circle with the sharpest brigtnest change
-    # Brightness = integral of brighness over circumference
-    # Brightness change = its derivative radius
-    # I.e. df/dr, where f = integral(intesity)*d(circ)  
+ 
 	
     #Write the image with circles
     cv2.imwrite(processed_path+'/'+file, img_scaled)
