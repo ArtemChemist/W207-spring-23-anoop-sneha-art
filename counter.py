@@ -47,11 +47,11 @@ def define_circular_ROI(image):
 
 #Thesea re the parameters that we are going to use
 accum_res  = 5 # image resolution/accum resolution
-min_between = 30 #Min dist between circles. 
+min_between = 15 #Min dist between circles. 
 minRadius = 610 #Min radius of a circle. 
 maxRadius= 750 #The bigest circle expected
 Canny_thr = 800 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 800 #accumulator threshold for the circle centers at the detection stage
+Accum_thr = 850 #accumulator threshold for the circle centers at the detection stage
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
@@ -163,7 +163,7 @@ def FindBestCircle(circles, image):
     for circle in circles:
         #Find the max radius that can possibly be at this cneter point
         #For this find how far away this point is from the center of the image
-        #Then take the dimention with the largest offset and say the max radius is dimention-offset
+
         #Keep in mind that image.shape[height, width], but circle[x,y,r]
         Y_offset = abs(image.shape[0]/2-circle[1])
         X_offset = abs(image.shape[1]/2-circle[0])
@@ -172,14 +172,14 @@ def FindBestCircle(circles, image):
         max_R = min(max_X, max_Y)
         
         #print(f'X: {circle[0]} Y: {circle[1]} X_offset: {X_offset} Y_offset: {Y_offset} R: {max_R}')
-        cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),1)
+        #cv2.circle(image ,(circle[0], circle[1]), max_R,(255,255,255),1)
         #print(f'Shape: {image.shape} Y,X {circle[1]}, {circle[0]} Max Y: {circle[1]+max_R} Max X: {circle[0]+max_R}')
         
-        Deriv_Step = 20
+        Deriv_Step = 10
         Deriv_f_R = Deriv_Intensity_f_R(image,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
         MaxDeriv = max(Deriv_f_R)
         R_of_Max = 500 + Deriv_f_R.index(MaxDeriv)*Deriv_Step
-        print(f"MaxDeriv: {MaxDeriv} R: {R_of_Max}")
+        #print(f"MaxDeriv: {MaxDeriv} R: {R_of_Max}")
         Circles_dict[MaxDeriv]=(circle[0], circle[1],R_of_Max)
     Brightest = max(Circles_dict.keys())
     return [Circles_dict[Brightest]]
@@ -321,5 +321,5 @@ for file in file_names:
     #Write the image with circles
     cv2.imwrite(processed_path+'/'+file, img_scaled)
     #Write the pre-processed image
-    cv2.imwrite(processed_path+'/'+file+'_proc', leveled)
+    #cv2.imwrite(processed_path+'/'+file+'_proc', leveled)
 
