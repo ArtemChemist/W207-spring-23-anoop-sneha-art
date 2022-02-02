@@ -10,7 +10,8 @@ from os.path import isfile, join
 
 def create_circular_mask(h, w, center=None, radius=None):
     '''
-    Creates a circular mask based on the dimentions, radius and the desired loaction
+    Creates a mask of dimentions, height = h, width = x, with a circle marked true, 
+    located at the center and having radius  = radius
     I modified it from here:
     https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
     '''
@@ -25,20 +26,9 @@ def create_circular_mask(h, w, center=None, radius=None):
     Y, X = np.ogrid[:h, :w]
     dist_from_center_sq = (X - center[0])**2 + (Y-center[1])**2
 
-    base_cond = dist_from_center_sq <= radius_sq
-    mask = np.array(np.where(base_cond, 255, 0), dtype=np.uint8)
+    mask = dist_from_center_sq <= radius_sq
 
     return mask
-
-def define_circular_ROI(image):
-    
-    H, W = image.shape[:2]
-    Y = H/2
-    X = W/2
-
-    radius= 0.37*W
-    
-    return Y,X,radius
 
 #Thesea re the parameters that we are going to use
 accum_res  = 5 # image resolution/accum resolution
@@ -358,19 +348,23 @@ def main():
             BestCirc = FindBestCircle(Circles, img_scaled)
 
             #Draw the best circel on the image
-            DrawCircles(BestCirc, img_scaled)
+            #DrawCircles(BestCirc, img_scaled)
 
             if len(BestCirc[0])>2:
                 #Create a new image that is a square bounding this circular ROI
                 x = BestCirc[0][0]  # X coordinate of center
                 y = BestCirc[0][1]  # Y coordinate of center
                 r = BestCirc[0][2]  # Radius
-                new_image = img[y-r:r+y, x-r:x+r, :  ]
-                cv2.imwrite(processed_path+'/'+file, new_image)
+                cut_image = img_scaled[y-r:r+y, x-r:x+r, :  ]
 
                 #Apply circluar mask,set everything else to 0.
-                mask = create_circular_mask(2*r, 2*r)
-    
+                mask = create_circular_mask(cut_image.shape[0], cut_image.shape[1], radius = r)
+                cut_image[~mask] = 0
+
+                #Scale the new image to 1500 pixels
+                image_to_write = ScaleImage(cut_image)
+                #Write final file to disk
+                cv2.imwrite(processed_path+'/'+file, image_to_write)
         
         #Write the image with circles
         #cv2.imwrite(processed_path+'/'+file, img_scaled)
