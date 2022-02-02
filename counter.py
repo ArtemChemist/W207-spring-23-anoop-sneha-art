@@ -48,6 +48,31 @@ def ScaleImage(image):
     img_resized = cv2.resize(image, new_size )
     return img_resized
 
+def EnhanceContrast(input_img, brightness = 0, contrast = 0):
+
+    if brightness != 0:
+        if brightness > 0:
+            shadow = brightness
+            highlight = 255
+        else:
+            shadow = 0
+            highlight = 255 + brightness
+        alpha_b = (highlight - shadow)/255
+        gamma_b = shadow
+        
+        buf = cv2.addWeighted(input_img, alpha_b, input_img, 0, gamma_b)
+    else:
+        buf = input_img.copy()
+    
+    if contrast != 0:
+        f = 131*(contrast + 127)/(127*(131-contrast))
+        alpha_c = f
+        gamma_c = 127*(1-f)
+        
+        buf = cv2.addWeighted(buf, alpha_c, buf, 0, gamma_c)
+    return buf
+
+
 def FindCircles(params, scaled_img):
 
     #Convert to grayscale
@@ -362,9 +387,13 @@ def main():
                 cut_image[~mask] = 0
 
                 #Scale the new image to 1500 pixels
-                image_to_write = ScaleImage(cut_image)
+                ROI_img = ScaleImage(cut_image)
+
+                #Enhance contrast
+                final = EnhanceContrast(ROI_img, -20, 45)
+
                 #Write final file to disk
-                cv2.imwrite(processed_path+'/'+file, image_to_write)
+                cv2.imwrite(processed_path+'/'+file, final)
         
         #Write the image with circles
         #cv2.imwrite(processed_path+'/'+file, img_scaled)
