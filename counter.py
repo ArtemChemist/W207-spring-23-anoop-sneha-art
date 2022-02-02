@@ -5,20 +5,15 @@ import cv2
 import os
 import math
 from skimage import data, filters
-
-#get a list of files in the folder with pics
 from os import listdir
 from os.path import isfile, join
-folder_path = os.path.dirname(__file__)+'/Smpl_Im'
-processed_path = os.path.dirname(__file__)+'/Thresholded'
-file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
-
-# finction creates a circular mask based on the dimentions, radius and the desired loaction
-#I modified it from here:
-#https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
 
 def create_circular_mask(h, w, center=None, radius=None):
-
+    '''
+    Creates a circular mask based on the dimentions, radius and the desired loaction
+    I modified it from here:
+    https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
+    '''
     if center is None: # use the middle of the image
         center = (int(w/2), int(h/2))
     if radius is None: # use the smallest distance between the center and image walls
@@ -89,6 +84,11 @@ def FindCircles(params, scaled_img):
         return [], img_contrast
 
 def DrawCircles(circle_array, target):
+    '''
+    Draws green circles with red centers on the "target" image. Assumes an array of circles "circle_array"
+     to have center_x at indx 0, center y ant index 1 and radius at index 2.
+    If some circles do not have radius defined, draws them as red circls radius 500
+    '''
 
     #Draw circles and their centers
     for i in circle_array:
@@ -115,9 +115,9 @@ def DrawCircles(circle_array, target):
         
 def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width = int):
     '''
-    Finds 100 points on circle cnetered at "center" and with radius "radius"
-    Sums up intensities of the "image" at these points.
-    Essentially an integral over circumference
+    Finds 100 points on circle cnetered at "center" and with radius "radius".
+    Sums up intensities of the "image" at these points. "band_width" is not used at the moment
+    Essentially an integral over circumference. 
     '''
 
     #Calcualte values of sin and cos for each angle we will use, keep in in np.array fro speed
@@ -257,7 +257,9 @@ def Setup_Blob_Detector():
     return params
 
 def alignImages(im1, im2, msk, name):
-    # I modified this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
+    '''
+    I modified this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
+    '''
     # Convert images to grayscale
     im1Gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
     im2Gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
@@ -327,31 +329,52 @@ MAX_FEATURES = 500
 GOOD_MATCH_PERCENT = 0.15
 
 # Read reference image
-imReference = cv2.imread(folder_path+'/'+'Ref.jpg', cv2.IMREAD_COLOR)
+#imReference = cv2.imread(folder_path+'/'+'Ref.jpg', cv2.IMREAD_COLOR)
 
-for file in file_names:
-    #Read the image
-    img = cv2.imread(folder_path+'/'+file)
+def main():
+    #get a list of files in the folder with pics
+    folder_path = os.path.dirname(__file__)+'/Smpl_Im'
+    processed_path = os.path.dirname(__file__)+'/Thresholded'
+    file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
 
-    #Scale Image
-    img_scaled = ScaleImage(img)
+    for file in file_names:
+        #Read the image
+        img = cv2.imread(folder_path+'/'+file)
 
-    #Take scaled image, find circles and return a list of circles
-    Circles, leveled = FindCircles(params_Hough, img_scaled)
-    print(f"{file[0:-4]} {len(Circles):10}")
+        #Scale Image
+        img_scaled = ScaleImage(img)
 
-    #Draw the circles on the image provided
-    if len(Circles)>0:
-        # In the list of centers, find the center of the true ROI
-        # ROI is the circle with the sharpest brigtnest change
-        # Brightness = integral of brighness over circumference
-        # Brightness change = its derivative on radius
-        # I.e. df/dr, where f = integral(intesity)*d(circ) 
-        BestCirc = FindBestCircle(Circles, img_scaled)
-        DrawCircles(BestCirc, img_scaled)
- 
-	
-    #Write the image with circles
-    cv2.imwrite(processed_path+'/'+file, img_scaled)
+        #Take scaled image, find circles and return an array of circles
+        Circles, leveled = FindCircles(params_Hough, img_scaled)
+        print(f"{file[0:-4]} {len(Circles):10}")
 
+        #If there are any circles, filter them by centricity and dI/dR
+        if len(Circles)>0:
+            # In the list of centers, find the center of the true ROI
+            # ROI is the circle with the sharpest brigtnest change
+            # Brightness = integral of intensity over circumference
+            # Brightness change = its derivative on radius
+            # I.e. df/dr, where f = integral(intesity)*d(circ) 
+            BestCirc = FindBestCircle(Circles, img_scaled)
+
+            #Draw the best circel on the image
+            DrawCircles(BestCirc, img_scaled)
+
+            if len(BestCirc[0])>2:
+                #Create a new image that is a square bounding this circular ROI
+                x = BestCirc[0][0]  # X coordinate of center
+                y = BestCirc[0][1]  # Y coordinate of center
+                r = BestCirc[0][2]  # Radius
+                new_image = img[y-r:r+y, x-r:x+r, :  ]
+                cv2.imwrite(processed_path+'/'+file, new_image)
+
+                #Apply circluar mask,set everything else to 0.
+                mask = create_circular_mask(2*r, 2*r)
+    
+        
+        #Write the image with circles
+        #cv2.imwrite(processed_path+'/'+file, img_scaled)
+
+if __name__ == '__main__':
+    main()
 
