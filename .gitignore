@@ -60,7 +60,8 @@ Thresholded/Pos_5.jpg
 Thresholded/Pos_Big_1.jpg
 Thresholded/Pos_Big_2.jpg
 Thresholded/Ref.jpg
-Smpl_Im/Neg.jpg
+Smpl_Im/*.jpg
 Thresholded/Pos_5.jpg
 Thresholded/Pos_Big_1.jpg
-Thresholded/Pos_Big_2.jpg
+Thresholded/*.jpg
+**/*.jpg

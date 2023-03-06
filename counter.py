@@ -4,7 +4,7 @@ import numpy as np
 import cv2
 import os
 import math
-from skimage import data, filters
+# from skimage import data, filters
 from os import listdir
 from os.path import isfile, join
 
@@ -367,7 +367,7 @@ def main():
         if len(Circles)>0:
             # In the list of centers, find the center of the true ROI
             # ROI is the circle with the sharpest brigtnest change
-            # Brightness = integral of intensity over circumference
+            # Brightness = integral of intensity along circumference
             # Brightness change = its derivative on radius
             # I.e. df/dr, where f = integral(intesity)*d(circ) 
             BestCirc = FindBestCircle(Circles, img_scaled)
