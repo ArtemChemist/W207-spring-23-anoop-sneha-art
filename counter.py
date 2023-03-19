@@ -1,10 +1,8 @@
 from cmath import sin
-import matplotlib as plt
 import numpy as np
 import cv2
 import os
 import math
-# from skimage import data, filters
 from os import listdir
 from os.path import isfile, join
 
@@ -30,7 +28,7 @@ def create_circular_mask(h, w, center=None, radius=None):
 
     return mask
 
-#Thesea re the parameters that we are going to use
+#These are the Hough Transform parameters that we are going to use
 accum_res  = 5 # image resolution/accum resolution
 min_between = 15 #Min dist between circles. 
 minRadius = 610 #Min radius of a circle. 
@@ -153,7 +151,9 @@ def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width
     return sum_intensities
 
 def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
-    
+    '''
+    Finds derivative of the d(circumference integral)/d(distanse from center)
+    '''
     #First Calucalte how integral brightness of the circles dpends on their radius
     #Do that starting from fairly large radius, to start close to the edge already
     Intensity_f_R = [   Circ_Integral(image, center, i, step)    for i in range(min_radius, max_radius, step) ]
@@ -168,6 +168,9 @@ def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int,
     return Deriv
 
 def FindBestCircle(circles, image):
+    '''
+    Find the circle that had the sharpest change brightness as we move away from the center
+    '''
     #Convert to grayscale
     img_gr = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
@@ -233,118 +236,6 @@ def FindBestCircle(circles, image):
     
     return [return_value]
 
-def Setup_Blob_Detector():
-
-    params = cv2.SimpleBlobDetector_Params()
- 
-    #Change thresholds
-    params.minThreshold = 40
-    params.maxThreshold = 150
-    params.thresholdStep = 3
-    params.minDistBetweenBlobs = 5
-    params.minRepeatability = 7
-
-
-    # Filter by Area.
-    params.filterByArea = True
-    params.minArea = 250
-    params.maxArea = 5000000
-
-    # Filter by CircularityTrue
-    params.filterByCircularity = True
-    params.minCircularity = 0.25
-    params.maxCircularity = 0.99
-
-    # Filter by Convexity
-    params.filterByConvexity = True
-    params.minConvexity = 0.2
-    params.maxConvexity = 0.99
-
-    # Filter by Inertia
-    params.filterByInertia = True
-    params.minInertiaRatio = 0.05
-    params.maxInertiaRatio = 0.99
-
-    # Filter by Color
-    params.filterByColor = True
-    params.blobColor = 255
-
-    return params
-
-def alignImages(im1, im2, msk, name):
-    '''
-    I modified this code from https://learnopencv.com/image-alignment-feature-based-using-opencv-c-python/
-    '''
-    # Convert images to grayscale
-    im1Gray = cv2.cvtColor(im1, cv2.COLOR_BGR2GRAY)
-    im2Gray = cv2.cvtColor(im2, cv2.COLOR_BGR2GRAY)
-
-    # Detect ORB features and compute descriptors.
-    orb = cv2.ORB_create(MAX_FEATURES)
-    keypoints1, descriptors1 = orb.detectAndCompute(im1Gray, mask=msk)
-    keypoints2, descriptors2 = orb.detectAndCompute(im2Gray, mask=msk)
-
-    # Match features.
-    matcher = cv2.DescriptorMatcher_create(cv2.DESCRIPTOR_MATCHER_BRUTEFORCE_HAMMING)
-    matches = matcher.match(descriptors1, descriptors2, None)
-
-    # Sort matches by score
-    matches = list(matches)
-    matches.sort(key=lambda x: x.distance, reverse=False)
-
-    # Remove not so good matches
-    numGoodMatches = int(len(matches) * GOOD_MATCH_PERCENT)
-    matches = matches[:numGoodMatches]
-
-    # Draw top matches
-    imMatches = cv2.drawMatches(im1, keypoints1, im2, keypoints2, matches, None)
-    cv2.imwrite(name, imMatches)
-
-    # Extract location of good matches
-    points1 = np.zeros((len(matches), 2), dtype=np.float32)
-    points2 = np.zeros((len(matches), 2), dtype=np.float32)
-
-    for i, match in enumerate(matches):
-        points1[i, :] = keypoints1[match.queryIdx].pt
-        points2[i, :] = keypoints2[match.trainIdx].pt
-    '''
-    # Find homography
-    if len(points1) >=4 and len(points2)>=4:
-        h, mask_1 = cv2.findHomography(points1, points2, cv2.RANSAC,ransacReprojThreshold=5.0)
-    else:
-        return im1, []
-    '''
-    # Calculate the transformation matrix using cv2.getAffineTransform()
-    points_source = points1[0:3]
-    points_ref = points2[0:3]
-    h= cv2.getAffineTransform(points_source, points_ref)
-    
-    if h is not None:
-        '''
-        # Use homography for Perspective transform
-        height, width, channels = im2.shape
-        im1Reg = cv2.warpPerspective(im1, h, (height, width), np.array([]))
-        '''
-        # Use transformation matrix for affine transform
-        height, width, channels = im2.shape
-        im1Reg = cv2.warpAffine(im1, h, (height, width), np.array([]))
-        
-
-        return im1Reg, h
-
-    else:
-        return im1, h
-
-
-# Create a detector with the parameters
-params = Setup_Blob_Detector()
-blob_detector = cv2.SimpleBlobDetector_create(params)
-
-MAX_FEATURES = 500
-GOOD_MATCH_PERCENT = 0.15
-
-# Read reference image
-#imReference = cv2.imread(folder_path+'/'+'Ref.jpg', cv2.IMREAD_COLOR)
 
 def main():
     #get a list of files in the folder with pics
@@ -360,7 +251,7 @@ def main():
         img_scaled = ScaleImage(img)
 
         #Take scaled image, find circles and return an array of circles
-        Circles, leveled = FindCircles(params_Hough, img_scaled)
+        Circles, _ = FindCircles(params_Hough, img_scaled)
         print(f"{file[0:-4]} {len(Circles):10}")
 
         #If there are any circles, filter them by centricity and dI/dR
