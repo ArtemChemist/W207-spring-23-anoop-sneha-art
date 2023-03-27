@@ -239,55 +239,58 @@ def FindBestCircle(circles, image):
 
 def main():
     #get a list of files in the folder with pics
-    folder_path = os.path.dirname(__file__)+'/Smpl_Im'
+    folder_path = os.path.dirname(__file__)+'/SettleplateID-Hours-Count'
     processed_path = os.path.dirname(__file__)+'/Thresholded'
     file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
 
     for file in file_names:
-        #Read the image
-        img = cv2.imread(folder_path+'/'+file)
+        try:
+            #Read the image
+            img = cv2.imread(folder_path+'/'+file)
 
-        #Scale Image
-        img_scaled = ScaleImage(img)
+            #Scale Image
+            img_scaled = ScaleImage(img)
 
-        #Take scaled image, find circles and return an array of circles
-        Circles, _ = FindCircles(params_Hough, img_scaled)
-        print(f"{file[0:-4]} {len(Circles):10}")
+            #Take scaled image, find circles and return an array of circles
+            Circles, _ = FindCircles(params_Hough, img_scaled)
+            print(f"{file[0:-4]} {len(Circles):10}")
 
-        #If there are any circles, filter them by centricity and dI/dR
-        if len(Circles)>0:
-            # In the list of centers, find the center of the true ROI
-            # ROI is the circle with the sharpest brigtnest change
-            # Brightness = integral of intensity along circumference
-            # Brightness change = its derivative on radius
-            # I.e. df/dr, where f = integral(intesity)*d(circ) 
-            BestCirc = FindBestCircle(Circles, img_scaled)
+            #If there are any circles, filter them by centricity and dI/dR
+            if len(Circles)>0:
+                # In the list of centers, find the center of the true ROI
+                # ROI is the circle with the sharpest brigtnest change
+                # Brightness = integral of intensity along circumference
+                # Brightness change = its derivative on radius
+                # I.e. df/dr, where f = integral(intesity)*d(circ) 
+                BestCirc = FindBestCircle(Circles, img_scaled)
 
-            #Draw the best circel on the image
-            #DrawCircles(BestCirc, img_scaled)
+                #Draw the best circel on the image
+                #DrawCircles(BestCirc, img_scaled)
 
-            if len(BestCirc[0])>2:
-                #Create a new image that is a square bounding this circular ROI
-                x = BestCirc[0][0]  # X coordinate of center
-                y = BestCirc[0][1]  # Y coordinate of center
-                r = BestCirc[0][2]  # Radius
-                cut_image = img_scaled[y-r:r+y, x-r:x+r, :  ]
+                if len(BestCirc[0])>2:
+                    #Create a new image that is a square bounding this circular ROI
+                    x = BestCirc[0][0]  # X coordinate of center
+                    y = BestCirc[0][1]  # Y coordinate of center
+                    r = BestCirc[0][2]  # Radius
+                    cut_image = img_scaled[y-r:r+y, x-r:x+r, :  ]
 
-                #Apply circluar mask,set everything else to 0.
-                mask = create_circular_mask(cut_image.shape[0], cut_image.shape[1], radius = r)
-                cut_image[~mask] = 0
+                    #Apply circluar mask,set everything else to 0.
+                    mask = create_circular_mask(cut_image.shape[0], cut_image.shape[1], radius = r)
+                    cut_image[~mask] = 0
 
-                #Scale the new image to 1500 pixels
-                ROI_img = ScaleImage(cut_image)
+                    #Scale the new image to 1500 pixels
+                    ROI_img = ScaleImage(cut_image)
 
-                #Enhance contrast
-                final = EnhanceContrast(ROI_img, -20, 45)
+                    #Enhance contrast
+                    final = EnhanceContrast(ROI_img, -20, 45)
 
-                #Write final file to disk
-                cv2.imwrite(processed_path+'/'+file, final)
-        
-        #Write the image with circles
-        #cv2.imwrite(processed_path+'/'+file, img_scaled)
+                    #Write final file to disk
+                    cv2.imwrite(processed_path+'/'+file, final)
+            
+            #Write the image with circles
+            #cv2.imwrite(processed_path+'/'+file, img_scaled)
+        except:
+            print(f'Something went wrong on {file}')
 
 if __name__ == '__main__':
     main()
