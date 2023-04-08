@@ -38,13 +38,36 @@ Accum_thr = 900 #accumulator threshold for the circle centers at the detection s
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
-def ScaleImage(image):
-    #resize image to ~1500x1500
-    Width = image.shape[1]
-    Scale = Width/1500
-    new_size = (int(image.shape[1]/Scale), int(image.shape[0]/Scale)) 
-    img_resized = cv2.resize(image, new_size )
-    return img_resized
+def ScaleImage (image, width = 1512, height = None, inter = cv2.INTER_AREA):
+    # initialize the dimensions of the image to be resized and
+    # grab the image size
+    dim = None
+    (h, w) = image.shape[:2]
+
+    # if both the width and height are None, then return the
+    # original image
+    if width is None and height is None:
+        return image
+
+    # check to see if the width is None
+    if width is None:
+        # calculate the ratio of the height and construct the
+        # dimensions
+        r = height / float(h)
+        dim = (int(w * r), height)
+
+    # otherwise, the height is None
+    else:
+        # calculate the ratio of the width and construct the
+        # dimensions
+        r = width / float(w)
+        dim = (width, int(h * r))
+
+    # resize the image
+    resized = cv2.resize(image, dim, interpolation = inter)
+
+    # return the resized image
+    return resized
 
 def EnhanceContrast(input_img, brightness = 0, contrast = 0):
 
