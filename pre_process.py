@@ -5,7 +5,7 @@ import os
 import math
 from os import listdir
 from os.path import isfile, join
-
+import matplotlib.pyplot as plt
 def create_circular_mask(h, w, center=None, radius=None):
     '''
     Creates a mask of dimentions, height = h, width = x, with a circle marked true, 
@@ -29,12 +29,12 @@ def create_circular_mask(h, w, center=None, radius=None):
     return mask
 
 #These are the Hough Transform parameters that we are going to use
-accum_res  = 5 # image resolution/accum resolution
-min_between = 15 #Min dist between circles. 
-minRadius = 610 #Min radius of a circle. 
+accum_res  = 6 # image resolution/accum resolution
+min_between = 5 #Min dist between circles. 
+minRadius = 590 #Min radius of a circle. 
 maxRadius= 750 #The bigest circle expected
-Canny_thr = 800 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 900 #accumulator threshold for the circle centers at the detection stage
+Canny_thr = 900 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
+Accum_thr = 680 #accumulator threshold for the circle centers at the detection stage
 
 params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
@@ -97,8 +97,9 @@ def EnhanceContrast(input_img, brightness = 0, contrast = 0):
 def FindCircles(params, scaled_img):
 
     #Convert to grayscale
-    img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
-    
+    #img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
+    img_gr  = scaled_img[:,:,0]
+
     #Enhance contrast
     lookUpTable = np.empty((1,256), np.uint8)
     for i in range(256):
@@ -151,27 +152,18 @@ def DrawCircles(circle_array, target):
         
 def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width = int):
     '''
-    Finds 100 points on circle cnetered at "center" and with radius "radius".
-    Sums up intensities of the "image" at these points. "band_width" is not used at the moment
-    Essentially an integral over circumference. 
+    Returns fraction of pixels bighter then 150 in the band 
     '''
 
-    #Calcualte values of sin and cos for each angle we will use, keep in in np.array fro speed
-    sin_cos = np.array(  [   (math.sin(angle), math.cos(angle))    for angle in np.arange(0, 2*math.pi, math.pi/50)     ]        )
-    
-    #Find the x and y coordinates of points on the circle, summ up intensities for all these points
-    sum_intensities = 0
-    for value in sin_cos:
+    mask_in = create_circular_mask(image.shape[0], image.shape[1], center=center, radius=radius)
+    mask_out = create_circular_mask(image.shape[0], image.shape[1], center=center, radius=(radius + band_width))
+    # Apply mask on the image and calculate histogram
+    hist = np.histogram(image[mask_out & ~mask_in], bins = np.arange(256))[0]
 
-        x_at_angel = center[0]+ int(radius*value[1])
-        if x_at_angel>=image.shape[1]: x_at_angel = image.shape[1]-1
+    # Calculate fraction of the hist that is occupied by bright pixels
+    fraction = sum(hist[150:])/sum(hist)
 
-        y_at_angel = center[1]+ int(radius*value[0])        
-        if y_at_angel>=image.shape[0]: y_at_angel = image.shape[0]-1
-        
-        sum_intensities+=image[y_at_angel,x_at_angel]
-
-    return sum_intensities
+    return fraction
 
 def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
     '''
@@ -180,13 +172,11 @@ def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int,
     #First Calucalte how integral brightness of the circles dpends on their radius
     #Do that starting from fairly large radius, to start close to the edge already
     Intensity_f_R = [   Circ_Integral(image, center, i, step)    for i in range(min_radius, max_radius, step) ]
-    
+    Intensity_f_R = np.array(Intensity_f_R)
     # Now calculate derivative of this function
-    
-    Deriv = []
-    for i in range(0, len(Intensity_f_R)-1):
-        Deriv.append(Intensity_f_R[i+1]-Intensity_f_R[i])
-
+    i_next = np.arange(1, len(Intensity_f_R))
+    i = np.arange(0, len(Intensity_f_R)-1)
+    Deriv = np.add(Intensity_f_R[i_next],-Intensity_f_R[i])
     #return this reriative
     return Deriv
 
@@ -194,7 +184,7 @@ def FindBestCircle(circles, image):
     '''
     Find the circle that had the sharpest change brightness as we move away from the center
     '''
-    #Convert to grayscale
+    #Take blue channel
     img_gr = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     
     #Enhance contrast, but not as dramatically as for Hugh transform
@@ -209,7 +199,7 @@ def FindBestCircle(circles, image):
     zeros = np.zeros((circles.shape[0], 3), dtype = int)
     circles = np.concatenate(  (circles, zeros),  axis = 1)  
 
-    for circle in circles:
+    for i, circle in enumerate(circles):
         #Find the max radius that can possibly be at this cneter point
         #For this find how far away this point is from the center of the image
         #Keep in mind that image.shape[height, width], but circle[x,y,r]
@@ -219,16 +209,17 @@ def FindBestCircle(circles, image):
         max_Y = int(image.shape[0]/2-Y_offset)
         max_R = min(max_X, max_Y)
         circle[3]=max_R
-        
-        #Calculate how intensity changes (i.e. derivative) as the radius increases.       
-        Deriv_Step = 10
-        Deriv_f_R = Deriv_Intensity_f_R(img_contrast,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
-        #Find what was the sharpest change for this circle, 
-        MaxDeriv = max(Deriv_f_R)
-        circle[4] =  MaxDeriv
-        #Find where this sharp change occured
-        R_of_Max = 500 + Deriv_f_R.index(MaxDeriv)*Deriv_Step
-        circle[5] = R_of_Max
+        if max_R > 510:
+            #Calculate how intensity changes (i.e. derivative) as the radius increases.       
+            Deriv_Step = int(np.round((max_R - 500)/10))
+
+            Deriv_f_R = Deriv_Intensity_f_R(img_contrast,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
+            #Find what was the sharpest change for this circle, 
+            MaxDeriv = np.max(Deriv_f_R)
+            circle[4] =  int(MaxDeriv * 1000) # we strore it in int array
+            #Find where this sharp change occured
+            R_of_Max = 500 + (Deriv_f_R.argmax()+1)*Deriv_Step
+            circle[5] = R_of_Max
 
     #Find the circle that had the most abrupt change.
     #The idea is that as we go out from the most central point will have all LEDs come into view at once
@@ -237,46 +228,51 @@ def FindBestCircle(circles, image):
     sorted_circles = circles[np.argsort(circles[:, 4])]
     BestCircle = sorted_circles[-1]
 
-    #Now that we know where is the true center of the ROI, let's find its true radius.
-    #Get full Deriv for this one circle, all the way to the max possible radius
-    Deriv_Brightest = Deriv_Intensity_f_R(img_contrast,  (BestCircle[0], BestCircle[1]), 500, BestCircle[3], 5)
+    # Now that we know where is the true center of the ROI, let's find its true radius.
+    # Get full Deriv for this one circle, all the way to the max possible radius
+    #  
+    FineStep = 2
+    Fr_Brightness = [   Circ_Integral(img_contrast, (BestCircle[0], BestCircle[1]), i, FineStep)    for i in range(500, BestCircle[3], FineStep) ]
+    Deriv_Brightest = Deriv_Intensity_f_R(img_contrast,  (BestCircle[0], BestCircle[1]), 500, BestCircle[3], FineStep )
+    Deriv_Brightest[Deriv_Brightest<0] = 0
+    Fr = np.round(Fr_Brightness/np.max(Fr_Brightness),2)
+    Deriv_Brightest = Deriv_Brightest/np.max(Deriv_Brightest)
+    Deriv = np.round(Deriv_Brightest, 2)
+    print(Fr)
 
-    #Add center coordinate to the list that we wil return
+    # Start forming the list we will return: add center coordinate
     return_value = [BestCircle[0], BestCircle[1]]
 
-    #Go through the deriv and if the point and the next point is above 1500, say that is where ROI stops
-    #Don't forget that we only calculate starting from 500 pixels from the center, so add those 500px
-    for i in range(len(Deriv_Brightest)-1):
-        if Deriv_Brightest[i]>1300   and Deriv_Brightest[i+1]>1300:
-            return_value.append(500+i*5)
+
+    # Go through the deriv and if the point and the next point is above 1500, say that is where ROI stops
+    # Don't forget that we only calculate starting from 500 pixels from the center, so add those 500px
+    for i in range(len(Fr)-1):
+        if Fr[i] > 0.15 or Deriv[i] > 0.15:
+            return_value.append(500+i*FineStep)
             break
-    #If this condition was not met, just go and find were derivative was higher than 1500 at least once
-    else:
-        for i in range(len(Deriv_Brightest)-1):
-            if (Deriv_Brightest[i-1]+Deriv_Brightest[i]+Deriv_Brightest[i+1]) > 1500:
-                return_value.append(500+(i-1)*5)
-                break
+
     
     return [return_value]
 
 
 def main():
     #get a list of files in the folder with pics
-    folder_path = os.path.dirname(__file__)+'/SettleplateID-Hours-Count'
-    processed_path = os.path.dirname(__file__)+'/Thresholded'
+    folder_path = os.path.dirname(__file__)+'/Smpl_Im'
+    processed_path = os.path.dirname(__file__)+'/Smpl_Thresh'
     file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
 
     for file in file_names:
         try:
             #Read the image
             img = cv2.imread(folder_path+'/'+file)
+            print(f"\nProcessing {file[0:-4]}")
 
             #Scale Image
             img_scaled = ScaleImage(img)
 
             #Take scaled image, find circles and return an array of circles
             Circles, _ = FindCircles(params_Hough, img_scaled)
-            print(f"{file[0:-4]} {len(Circles):10}")
+            print(f"Num circles {len(Circles):10}")
 
             #If there are any circles, filter them by centricity and dI/dR
             if len(Circles)>0:
@@ -287,8 +283,8 @@ def main():
                 # I.e. df/dr, where f = integral(intesity)*d(circ) 
                 BestCirc = FindBestCircle(Circles, img_scaled)
 
-                #Draw the best circel on the image
-                #DrawCircles(BestCirc, img_scaled)
+                # Draw the best circel on the image
+                DrawCircles(BestCirc, img_scaled)
 
                 if len(BestCirc[0])>2:
                     #Create a new image that is a square bounding this circular ROI
@@ -302,7 +298,7 @@ def main():
                     cut_image[~mask] = 0
 
                     #Scale the new image to 1500 pixels
-                    ROI_img = ScaleImage(cut_image)
+                    ROI_img = ScaleImage(cut_image, width = 1024)
 
                     #Enhance contrast
                     final = EnhanceContrast(ROI_img, -20, 45)
