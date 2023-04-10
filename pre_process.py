@@ -5,7 +5,9 @@ import os
 import math
 from os import listdir
 from os.path import isfile, join
-import matplotlib.pyplot as plt
+#from skimage.filters import threshold_sauvola
+import time
+
 def create_circular_mask(h, w, center=None, radius=None):
     '''
     Creates a mask of dimentions, height = h, width = x, with a circle marked true, 
@@ -27,16 +29,6 @@ def create_circular_mask(h, w, center=None, radius=None):
     mask = dist_from_center_sq <= radius_sq
 
     return mask
-
-#These are the Hough Transform parameters that we are going to use
-accum_res  = 6 # image resolution/accum resolution
-min_between = 5 #Min dist between circles. 
-minRadius = 590 #Min radius of a circle. 
-maxRadius= 750 #The bigest circle expected
-Canny_thr = 900 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
-Accum_thr = 680 #accumulator threshold for the circle centers at the detection stage
-
-params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
 
 def ScaleImage (image, width = 1512, height = None, inter = cv2.INTER_AREA):
     # initialize the dimensions of the image to be resized and
@@ -94,11 +86,11 @@ def EnhanceContrast(input_img, brightness = 0, contrast = 0):
     return buf
 
 
-def FindCircles(params, scaled_img):
+def FindCircles(params, input_img):
 
     #Convert to grayscale
     #img_gr = cv2.cvtColor(scaled_img, cv2.COLOR_BGR2GRAY)
-    img_gr  = scaled_img[:,:,0]
+    img_gr  = input_img[:,:,0]
 
     #Enhance contrast
     lookUpTable = np.empty((1,256), np.uint8)
@@ -107,7 +99,7 @@ def FindCircles(params, scaled_img):
 
     img_contrast = cv2.LUT(img_gr, lookUpTable)    
     #Run Hough circle with the params tailored to find big circles.
-    circs = cv2.HoughCircles(image = img_contrast, 
+    circs = cv2.HoughCircles(image = img_gr, 
                     method = cv2.HOUGH_GRADIENT,
                     dp = params[0],
                     minDist = params[1],
@@ -154,16 +146,19 @@ def Circ_Integral(image = np.array, center = (int,int), radius = int, band_width
     '''
     Returns fraction of pixels bighter then 150 in the band 
     '''
+    # Make a circular band mask
+    in_radius_sq = radius**2
+    out_radius_sq = (radius+band_width)**2
+    h = image.shape[0] # Image height
+    w = image.shape[1] # Image width
+    Y, X = np.ogrid[:h, :w]
+    dist_from_center_sq = (Y - center[0])**2 + (X-center[1])**2
+    mask = (dist_from_center_sq >= in_radius_sq ) & (dist_from_center_sq <= out_radius_sq)
+    my_mask = np.asarray(mask, dtype="uint8")
+    hist = cv2.calcHist([image], [0], my_mask, [16], [0,256])
+    fraction = hist[-1]/sum(hist)
 
-    mask_in = create_circular_mask(image.shape[0], image.shape[1], center=center, radius=radius)
-    mask_out = create_circular_mask(image.shape[0], image.shape[1], center=center, radius=(radius + band_width))
-    # Apply mask on the image and calculate histogram
-    hist = np.histogram(image[mask_out & ~mask_in], bins = np.arange(256))[0]
-
-    # Calculate fraction of the hist that is occupied by bright pixels
-    fraction = sum(hist[150:])/sum(hist)
-
-    return fraction
+    return fraction[0]
 
 def Deriv_Intensity_f_R(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
     '''
@@ -185,7 +180,7 @@ def FindBestCircle(circles, image):
     Find the circle that had the sharpest change brightness as we move away from the center
     '''
     #Take blue channel
-    img_gr = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    img_gr = image[:,:,0]
     
     #Enhance contrast, but not as dramatically as for Hugh transform
     lookUpTable = np.empty((1,256), np.uint8)
@@ -211,7 +206,7 @@ def FindBestCircle(circles, image):
         circle[3]=max_R
         if max_R > 510:
             #Calculate how intensity changes (i.e. derivative) as the radius increases.       
-            Deriv_Step = int(np.round((max_R - 500)/10))
+            Deriv_Step = 10
 
             Deriv_f_R = Deriv_Intensity_f_R(img_contrast,  (circle[0], circle[1]), 500, max_R, Deriv_Step)
             #Find what was the sharpest change for this circle, 
@@ -238,7 +233,8 @@ def FindBestCircle(circles, image):
     Fr = np.round(Fr_Brightness/np.max(Fr_Brightness),2)
     Deriv_Brightest = Deriv_Brightest/np.max(Deriv_Brightest)
     Deriv = np.round(Deriv_Brightest, 2)
-    print(Fr)
+    #print(Fr)
+    #print(Deriv)
 
     # Start forming the list we will return: add center coordinate
     return_value = [BestCircle[0], BestCircle[1]]
@@ -247,7 +243,13 @@ def FindBestCircle(circles, image):
     # Go through the deriv and if the point and the next point is above 1500, say that is where ROI stops
     # Don't forget that we only calculate starting from 500 pixels from the center, so add those 500px
     for i in range(len(Fr)-1):
-        if Fr[i] > 0.15 or Deriv[i] > 0.15:
+        Int_crossed = False
+        Deriv_crossed = False
+        if Fr[i] > 0.14:
+            Int_crossed = True
+        if Deriv[i] > 0.14:
+            Deriv_crossed = True
+        if Int_crossed | Deriv_crossed:
             return_value.append(500+i*FineStep)
             break
 
@@ -262,17 +264,48 @@ def main():
     file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
 
     for file in file_names:
+        new_name = os.path.join(processed_path, file)
         try:
             #Read the image
             img = cv2.imread(folder_path+'/'+file)
-            print(f"\nProcessing {file[0:-4]}")
+            print(f"Processing {file[0:-4]}", end = "->  ")
 
             #Scale Image
             img_scaled = ScaleImage(img)
 
-            #Take scaled image, find circles and return an array of circles
-            Circles, _ = FindCircles(params_Hough, img_scaled)
-            print(f"Num circles {len(Circles):10}")
+            #These are the Hough Transform parameters that we are going to use
+            accum_res  = 3 # image resolution/accum resolution, 4 means accum is 1/4th of image
+            min_between = 4 #Min dist between circles. 
+            minRadius = 600 #Min radius of a circle. 
+            maxRadius= 740 #The bigest circle expected
+            Canny_thr = 1100 #anything above that is an edge automatically in Canny, the lower threshold is half of that.
+            Accum_thr = 1100 #accumulator threshold for the circle centers at the detection stage
+            params_Hough = [accum_res, min_between, Canny_thr, Accum_thr, minRadius, maxRadius]
+
+
+
+            # Take scaled image, find circles and return an array of circles
+            # Run quick optimization to get reasonable number of circles
+            start_time = time.time()
+            for i in range (0, 1100, 25):
+                params_Hough[2] = 1100 - i
+                params_Hough[3] = 1100 - i
+                #print(i, end = ' - ')
+                Circles, _ = FindCircles(params_Hough, img_scaled)
+                if len(Circles) > 20:
+                    if len(Circles) <50:
+                        break
+                    else:
+                        for k in range (25):
+                            params_Hough[2] = 1100-i + k
+                            params_Hough[3] = 1100-i + k
+                            #print(k, end = ' - ')
+                            Circles, _ = FindCircles(params_Hough, img_scaled)
+                            if len(Circles) <50:
+                                break
+                    break
+
+            print(f"   {len(Circles):10} circles, in {(time.time() - start_time):.2f} sec", end = " ->")
 
             #If there are any circles, filter them by centricity and dI/dR
             if len(Circles)>0:
@@ -281,7 +314,10 @@ def main():
                 # Brightness = integral of intensity along circumference
                 # Brightness change = its derivative on radius
                 # I.e. df/dr, where f = integral(intesity)*d(circ) 
+                
+                begin_time = time.time()
                 BestCirc = FindBestCircle(Circles, img_scaled)
+                print(f" found best in {(time.time() - begin_time):.2f} sec")
 
                 # Draw the best circel on the image
                 DrawCircles(BestCirc, img_scaled)
@@ -300,11 +336,15 @@ def main():
                     #Scale the new image to 1500 pixels
                     ROI_img = ScaleImage(cut_image, width = 1024)
 
-                    #Enhance contrast
-                    final = EnhanceContrast(ROI_img, -20, 45)
-
+                    """#  Enhance contrast
+                    contrast_enh = EnhanceContrast(ROI_img, -20, 45)
+                    thresh_sauvola = threshold_sauvola(contrast_enh[:,:,2], window_size=20)
+                    final = contrast_enh> thresh_sauvola"""
                     #Write final file to disk
-                    cv2.imwrite(processed_path+'/'+file, final)
+                    final = ROI_img
+                    if os.path.exists(new_name):
+                        os.remove(new_name)
+                    cv2.imwrite(new_name , final)
             
             #Write the image with circles
             #cv2.imwrite(processed_path+'/'+file, img_scaled)
