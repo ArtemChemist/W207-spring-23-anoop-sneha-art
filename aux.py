@@ -87,6 +87,7 @@ def EnhanceContrast(input_img, brightness = 0, contrast = 0):
 
 
 def DrawCircles(circle_array, target):
+    im_toreturn = target
     '''
     Draws green circles with red centers on the "target" image. Assumes an array of circles "circle_array"
      to have center_x at indx 0, center y ant index 1 and radius at index 2.
@@ -97,21 +98,23 @@ def DrawCircles(circle_array, target):
 
         if len(i) ==2:
             # draw the center of the circle
-            cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
+            cv2.circle(im_toreturn ,(i[0],i[1]),4,(0,0,255),4)
             # Draw the outer circle in red
-            cv2.circle(target ,(i[0],i[1]),500,(0,0,255),8)
+            cv2.circle(im_toreturn ,(i[0],i[1]),500,(0,0,255),8)
 
 
         if len(i) ==3:
             # draw the center of the circle
-            cv2.circle(target ,(i[0],i[1]),4,(0,0,255),4)
+            cv2.circle(im_toreturn ,(i[0],i[1]),4,(0,0,255),4)
             # draw the outer circle
-            cv2.circle(target ,(i[0],i[1]),i[2],(0,255,0),4)
+            cv2.circle(im_toreturn ,(i[0],i[1]),i[2],(0,255,0),4)
             #Print the radius at the center
             radius_txt = str(i[2])
-            cv2.putText(target, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
+            cv2.putText(im_toreturn, radius_txt, (i[0],i[1]), cv2.FONT_HERSHEY_PLAIN, 5, (128, 128, 0), 4)
                 #Print number of circles
 
     num_cir = str(len(circle_array))
-    cv2.putText(target, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
+    cv2.putText(im_toreturn, num_cir, (100,200), cv2.FONT_HERSHEY_PLAIN, 8, (150, 150, 0), 12)
+    return im_toreturn 
+
         

@@ -7,7 +7,7 @@ from os import listdir
 from os.path import isfile, join
 #from skimage.filters import threshold_sauvola
 import time
-from aux import Circular_mask, ScaleImage, DrawCircles
+from aux import Circular_mask, ScaleImage, DrawCircles, EnhanceContrast
 from circle import Find_Best_Circle, Find_Optimum_Circles
 
 
@@ -53,7 +53,7 @@ def main():
             print(f" found best in {(time.time() - begin_time):.2f} sec")
 
             # Draw the best circel on the image
-            DrawCircles(BestCirc, img_scaled)
+            img_scaled= DrawCircles(BestCirc, img_scaled)
 
             if len(BestCirc[0])>2:
                 #Create a new image that is a square bounding this circular ROI
@@ -70,10 +70,19 @@ def main():
                 ROI_img = ScaleImage(cut_image, width = 1024)
 
                 # Enhance contrast
-                # contrast_enh = EnhanceContrast(ROI_img, -20, 45)
-                #th = cv2.adaptiveThreshold(ROI_img[:,:,2],255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,11,2)
+                contrast_enh = EnhanceContrast(ROI_img, -20, 45)
+                '''
+                th = cv2.adaptiveThreshold(contrast_enh[:,:,0],255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,41,22)
+                th = cv2.bitwise_not(th)
+                kernel = np.ones((5, 5), np.uint8)
+                dilated = cv2.dilate(th , kernel, iterations = 10)
+                mask = dilated<244
+                contrast_enh[~mask] = 0
+                '''
+
                 #Write final file to disk
-                final = ROI_img
+                final = contrast_enh
+
                 if os.path.exists(new_name):
                     os.remove(new_name)
                 cv2.imwrite(new_name , final)
