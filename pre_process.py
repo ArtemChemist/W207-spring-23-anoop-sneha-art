@@ -14,8 +14,8 @@ from circle import Find_Best_Circle, Find_Optimum_Circles
 
 def main():
     #get a list of files in the folder with pics
-    folder_path = os.path.dirname(__file__)+'/Smpl_Im'
-    processed_path = os.path.dirname(__file__)+'/Smpl_Thresh'
+    folder_path = os.path.dirname(__file__)+'/Raw_data_CFU'
+    processed_path = os.path.dirname(__file__)+'/New_Thresh'
     file_names = [f for f in listdir(folder_path) if isfile(join(folder_path, f))]
 
     for file in file_names:
