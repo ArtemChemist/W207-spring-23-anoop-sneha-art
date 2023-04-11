@@ -97,7 +97,7 @@ def Find_Best_Circle(circles, image):
             #Calculate how intensity changes (i.e. derivative) as the radius increases.       
             Deriv_Step = 10
 
-            Deriv_f_R = Deriv(img_gr,  (circle[0], circle[1]), 500, 750, Deriv_Step)
+            Deriv_f_R = Deriv(img_gr,  (circle[0], circle[1]), 500, 720, Deriv_Step)
             #Find what was the sharpest change for this circle, 
             MaxDeriv = np.max(Deriv_f_R)
             circle[4] =  int(MaxDeriv * 1000) # we strore it in int array
@@ -120,9 +120,9 @@ def Find_Best_Circle(circles, image):
     Deriv_Brightest = Deriv(img_gr,  (BestCircle[0], BestCircle[1]), 500, BestCircle[3], FineStep )
     Fine_Int = np.round(Fine_Intensity,2)
     Fine_Deriv = np.round(Deriv_Brightest, 2)
-    print(' ')
-    print(Fine_Int)
-    print(Fine_Deriv)
+    # print(' ')
+    # print(Fine_Int)
+    # print(Fine_Deriv)
 
     # Start forming the list we will return: add center coordinate
     return_value = [BestCircle[0], BestCircle[1]]
@@ -135,7 +135,7 @@ def Find_Best_Circle(circles, image):
         Deriv_crossed = False
         if Fine_Int[i] > 0.09:
             Int_crossed = True
-        if Fine_Deriv[i] > 0.05:
+        if Fine_Deriv[i] > 0.09:
             Deriv_crossed = True
         if Deriv_crossed | Int_crossed:
             return_value.append(500+i*FineStep)
