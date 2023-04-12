@@ -74,6 +74,8 @@ def main():
                 # Enhance contrast
                 contrast_enh = EnhanceContrast(ROI_img, -20, 45)
 
+
+                '''
                 #Threshold the edges to remove residual LED glare
                 th = cv2.adaptiveThreshold(contrast_enh[:,:,0],255,cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY,41,22)
                 th = cv2.bitwise_not(th)
@@ -82,6 +84,7 @@ def main():
                 edge_mask = Circular_mask(dilated.shape[0], dilated.shape[1], radius = 495)
                 mask = (~edge_mask) & (dilated > 244)
                 contrast_enh[mask] = 0
+                '''
 
                 #Write final file to disk
                 final = contrast_enh

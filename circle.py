@@ -27,6 +27,10 @@ def Deriv(image= np.array, center = (int, int),  min_radius = int, max_radius = 
     '''
     #First Calucalte how integral brightness of the circles dpends on their radius
     #Do that starting from fairly large radius, to start close to the edge already
+
+
+
+
     Intensity_f_R = [   Intensity(image, center, i, step)    for i in range(min_radius, max_radius, step) ]
     Intensity_f_R = np.array(Intensity_f_R)
     # Now calculate derivative of this function
@@ -84,7 +88,7 @@ def Find_Best_Circle(circles, image):
     circles = np.concatenate(  (circles, zeros),  axis = 1)
 
     Deriv_Step = 10
-    Start_rad = 100
+    Start_rad = 200
     for i, circle in enumerate(circles):
         #Calculate how intensity changes (i.e. derivative) as the radius increases.       
         Deriv_f_R = Deriv(img_gr,  (circle[0], circle[1]), Start_rad, 800, Deriv_Step)
@@ -114,8 +118,8 @@ def Find_Best_Circle(circles, image):
     Fine_Int = np.round(Fine_Intensity,2)
     Fine_Deriv = np.round(Deriv_Brightest, 2)
     print(' ')
-    print(Fine_Int)
-    print(Fine_Deriv)
+    #print(Fine_Int)
+    #print(Fine_Deriv)
 
     # Start forming the list we will return: add center coordinate
     return_value = [BestCircle[0], BestCircle[1]]
