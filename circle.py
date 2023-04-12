@@ -27,11 +27,19 @@ def Deriv(image= np.array, center = (int, int),  min_radius = int, max_radius = 
     '''
     #First Calucalte how integral brightness of the circles dpends on their radius
     #Do that starting from fairly large radius, to start close to the edge already
+    h = image.shape[0] # Image height
+    w = image.shape[1] # Image width
+    Y, X = np.ogrid[:h, :w]
+    dist_from_center_sq = (Y - center[1])**2 + (X-center[0])**2 #We get x,y coord of center, NOT y,x
+    Intensity_f_R = []
+    
+    for i in range(min_radius, max_radius, step):
+        in_radius_sq = i**2
+        out_radius_sq = (i+step)**2
+        my_mask = np.asarray((dist_from_center_sq >= in_radius_sq ) & (dist_from_center_sq <= out_radius_sq), dtype="uint8")
+        hist = cv2.calcHist([image], [0], my_mask, [128], [0,256])
+        Intensity_f_R.append(hist[-1]/sum(hist))
 
-
-
-
-    Intensity_f_R = [   Intensity(image, center, i, step)    for i in range(min_radius, max_radius, step) ]
     Intensity_f_R = np.array(Intensity_f_R)
     # Now calculate derivative of this function
     i_next = np.arange(1, len(Intensity_f_R))
