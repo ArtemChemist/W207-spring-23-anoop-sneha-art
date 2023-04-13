@@ -1,6 +1,7 @@
 import numpy as np
 import cv2
 import math
+from scipy import signal
 
 
 def Intensity(image = np.array, center = (int,int), radius = int, band_width = int):
@@ -13,9 +14,8 @@ def Intensity(image = np.array, center = (int,int), radius = int, band_width = i
     h = image.shape[0] # Image height
     w = image.shape[1] # Image width
     Y, X = np.ogrid[:h, :w]
-    dist_from_center_sq = (Y - center[1])**2 + (X-center[0])**2 #We get x,y coord of center, NOT y,x
-    mask = (dist_from_center_sq >= in_radius_sq ) & (dist_from_center_sq <= out_radius_sq)
-    my_mask = np.asarray(mask, dtype="uint8")
+    dist_mtx = (Y - center[1])**2 + (X-center[0])**2 #We get x,y coord of center, NOT y,x
+    my_mask = np.asarray((dist_mtx >= in_radius_sq ) & (dist_mtx <= out_radius_sq), dtype="uint8")
     hist = cv2.calcHist([image], [0], my_mask, [128], [0,256])
     fraction = hist[-1]/sum(hist)
 
@@ -23,51 +23,51 @@ def Intensity(image = np.array, center = (int,int), radius = int, band_width = i
 
 def Deriv(image= np.array, center = (int, int),  min_radius = int, max_radius = int, step = int):
     '''
-    Finds derivative of the d(circumference integral)/d(distanse from center)
+    Finds derivative of the brightness of ring over its radius
     '''
-    #First Calucalte how integral brightness of the circles dpends on their radius
-    #Do that starting from fairly large radius, to start close to the edge already
+    # First Calucalte brightness of the ring as a function of its radius
+    # I define brightness of the ring as the fraction of the pixels with the highest brighness
+    # Use formula of a circle to make an array of 
+    # how far each in the image is from the center of the given ring pixel is 
     h = image.shape[0] # Image height
     w = image.shape[1] # Image width
     Y, X = np.ogrid[:h, :w]
-    dist_from_center_sq = (Y - center[1])**2 + (X-center[0])**2 #We get x,y coord of center, NOT y,x
-    Intensity_f_R = []
+    dist_mtx = (Y - center[1])**2 + (X-center[0])**2 #We get x,y coord of center, NOT y,x
     
+    bright_arr = [] # list that holds bightness for each radius
     for i in range(min_radius, max_radius, step):
+        # Make a mask shape of the ring
         in_radius_sq = i**2
         out_radius_sq = (i+step)**2
-        my_mask = np.asarray((dist_from_center_sq >= in_radius_sq ) & (dist_from_center_sq <= out_radius_sq), dtype="uint8")
+        my_mask = np.asarray((dist_mtx >= in_radius_sq ) & (dist_mtx <= out_radius_sq), dtype="uint8")
+        # Calculate histogram of the masked image
+        # Note, cv2 does that much faster then straight numpy.
+        # This appears to be the speed limiting step
         hist = cv2.calcHist([image], [0], my_mask, [128], [0,256])
-        Intensity_f_R.append(hist[-1]/sum(hist))
+        bright_arr.append((hist[-1]/sum(hist))[0])
+    bright_arr = np.array(bright_arr)
 
-    Intensity_f_R = np.array(Intensity_f_R)
     # Now calculate derivative of this function
-    i_next = np.arange(1, len(Intensity_f_R))
-    i = np.arange(0, len(Intensity_f_R)-1)
-    to_return = np.add(Intensity_f_R[i_next],-Intensity_f_R[i])
-    #return this reriative
-    return to_return
+    i_next = np.arange(1, len(bright_arr))
+    i = np.arange(0, len(bright_arr)-1)
+    deriv = np.add(bright_arr[i_next],-bright_arr[i])
+
+    return deriv
 
 
 def Find_All_Circles(params, input_img):
-
+    """
+    Runs Hough transform and returns an array of circles
+    """
     #Convert to grayscale
     img_gr = cv2.cvtColor(input_img, cv2.COLOR_BGR2GRAY)
-    #img_gr  = input_img[:,:,0]
-
-    #img_gr = cv2.adaptiveThreshold(input_img[:,:,0],255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,151,12)
-    #img_gr = cv2.bitwise_not(img_gr)
-
-
-    # blur = cv2.GaussianBlur(input_img[:,:,0],(5,5),0)
-    # ret3,img_gr = cv2.threshold(blur,0,255,cv2.THRESH_BINARY+cv2.THRESH_OTSU)
 
     #Enhance contrast
     lookUpTable = np.empty((1,256), np.uint8)
     for i in range(256):
         lookUpTable[0,i] = int(   255/  ( 1  + math.exp (0.15*(-i+120))    ))
-
     img_gr = cv2.LUT(img_gr, lookUpTable)
+
     #Run Hough circle with the params tailored to find big circles.
     circs = cv2.HoughCircles(image = img_gr, 
                     method = cv2.HOUGH_GRADIENT,
@@ -75,6 +75,7 @@ def Find_All_Circles(params, input_img):
                     minDist = params[1],
                     param1 = params[2], param2 = params[3],
                     minRadius = params[4], maxRadius = params[5])
+    
     #Round all numbers to the nearst int                
     if circs is not None:
         circs = np.uint16(np.around(circs))
@@ -82,24 +83,27 @@ def Find_All_Circles(params, input_img):
     else:
         return [], img_gr
 
-def Find_Best_Circle(circles, image):
+def Find_Best_Circle(circles, image, start: int, end: int, step:int):
     '''
-    Find the circle that had the sharpest change brightness as we move away from the center
+    Find the circle that had the sharpest change brightness as we move away from its center
     '''
+    Deriv_Step = step
+    Start_rad = start
+    End_rad = end
     #Take blue channel, threshold the hell out of it, to leave only LED
-    img_gr = cv2.adaptiveThreshold(image[:,:,0],255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,31,12)
+    img_gr = cv2.adaptiveThreshold(image[:,:,0],255,cv2.ADAPTIVE_THRESH_GAUSSIAN_C, cv2.THRESH_BINARY,81,15)
     img_gr = cv2.bitwise_not(img_gr)
+    kernel = np.ones((2, 2), np.uint8)
+    img_gr = cv2.erode(img_gr , kernel, iterations = 3)
 
     #Lets expand array of circles to store additional infor we find out
     #[0] - x, [1] - y, [2] - radius, [3], [4] - MaxDeriv, [5] - Rad for max deriv,
     zeros = np.zeros((circles.shape[0], 3), dtype = int)
     circles = np.concatenate(  (circles, zeros),  axis = 1)
 
-    Deriv_Step = 10
-    Start_rad = 200
     for i, circle in enumerate(circles):
         #Calculate how intensity changes (i.e. derivative) as the radius increases.       
-        Deriv_f_R = Deriv(img_gr,  (circle[0], circle[1]), Start_rad, 800, Deriv_Step)
+        Deriv_f_R = Deriv(img_gr,  (circle[0], circle[1]), Start_rad, End_rad, Deriv_Step)
 
         #Find what was the sharpest change for this circle, 
         MaxDeriv = np.max(Deriv_f_R)
@@ -117,58 +121,57 @@ def Find_Best_Circle(circles, image):
     BestCircle = sorted_circles[-1]
 
     # Now that we know where is the true center of the ROI, let's find its true radius.
-    # Get full Deriv and Intensity for this one circle
-    #  
+    # Get full Deriv for this one circle
     FineStep = 2
     best_center = (BestCircle[0], BestCircle[1])
-    Fine_Intensity = [   Intensity(img_gr, best_center , i, FineStep)    for i in range(Start_rad, 750, FineStep) ]
-    Deriv_Brightest = Deriv(img_gr, best_center, Start_rad, 750, FineStep )
-    Fine_Int = np.round(Fine_Intensity,2)
-    Fine_Deriv = np.round(Deriv_Brightest, 2)
-    print(' ')
-    #print(Fine_Int)
+
+    Deriv_Brightest = Deriv(img_gr, best_center, Start_rad, End_rad, FineStep )
+    Deriv_Brightest[Deriv_Brightest<0]=0
+    Fine_Deriv  = signal.medfilt(Deriv_Brightest, 3)
+    Fine_Deriv = np.round(Fine_Deriv, 3)
     #print(Fine_Deriv)
 
     # Start forming the list we will return: add center coordinate
     return_value = [BestCircle[0], BestCircle[1]]
 
-    # Go through the deriv and if it crosse some pre-defined trhreshold
+    # Go through the deriv until it crosses the pre-defined trhreshold
     # Add Start_rad pixels from the center, we only started there, not at 0
-    for i in range(len(Fine_Int)-1):
-        Int_crossed = False
+    for i in range(len(Fine_Deriv)):
         Deriv_crossed = False
-        if Fine_Int[i] > 0.09:
-            Int_crossed = True
-        if Fine_Deriv[i] > 0.09:
+        if Fine_Deriv[i] > 0.035:
             Deriv_crossed = True
-        if Deriv_crossed | Int_crossed:
+        if Deriv_crossed:
             best_rad = Start_rad+i*FineStep
             print(f"Crossed at {best_rad }")
             return_value.append(best_rad )
             break
-
-    
     return [return_value]
 
 def Find_Optimum_Circles(params_Hough, img, min_num, max_num):
-
-    # Take scaled image, find circles and return an array of circles
-    # Run quick optimization to get reasonable number of circles
+    """
+    Takes scaled image, finds circles and return an array of circles
+    Runs quick optimization of Hough trnasform params
+    to get reasonable number of circles
+    """
+    to_return = []
     for i in range (0, 1100, 10):
         params_Hough[2] = 1100 - i
         params_Hough[3] = 1100 - i
         Circles, _ = Find_All_Circles(params_Hough, img)
-        # print(f"{i}->{len(Circles)}", end = ' - ')
+        #print(f"{i}->{len(Circles)}", end = ' - ')
         if len(Circles) > min_num:
+            tmp = len(Circles)
             if len(Circles) <max_num:
+                to_return = Circles
                 break
             else:
                 for k in range (10):
                     params_Hough[2] = 1100-i + k
                     params_Hough[3] = 1100-i + k
-                    # print(f"{k}->{len(Circles)}", end = ' - ')
+                    #print(f"{k}->{len(Circles)}", end = ' - ')
                     Circles, _ = Find_All_Circles(params_Hough, img)
-                    if len(Circles) <max_num:
+                    if (len(Circles) <max_num) | (len(Circles) > tmp):
                         break
+            to_return = Circles
             break
-    return Circles
+    return to_return

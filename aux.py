@@ -12,8 +12,7 @@ def Circular_mask(h, w, center=None, radius=None):
     '''
     Creates a mask of dimentions, height = h, width = x, with a circle marked true, 
     located at the center and having radius  = radius
-    I modified it from here:
-    https://stackoverflow.com/questions/44865023/how-can-i-create-a-circular-mask-for-a-numpy-array
+    center: (x,y) tuple
     '''
     if center is None: # use the middle of the image
         center = (int(w/2), int(h/2))
