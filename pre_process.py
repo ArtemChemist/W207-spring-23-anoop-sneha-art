@@ -63,11 +63,16 @@ def main():
                     r = BestCirc[0][2]  # Radius
 
                     # Apply circluar mask around best circle, set everything outside to 0
-
-                    hole = Circular_mask(img_scaled.shape[0], img_scaled.shape[1], center = (x,y), radius = r)
+                    h = img_scaled.shape[0]
+                    w = img_scaled.shape[1]
+                    hole = Circular_mask(h, w, center = (x,y), radius = r)
                     img_scaled[~hole] = 0
+                    top_edge = max(y-r, 0)
+                    bottom_edge = min(y+r, h)
+                    left_edge = max(x-r,0)
+                    right_edge = min(x+r,w)
                     #Cut out the region of interest around this circle
-                    ROI_image = img_scaled[y-r:y+r, x-r:x+r, :]
+                    ROI_image = img_scaled[top_edge:bottom_edge, left_edge:right_edge, :]
 
                     # Enhance contrast
                     contrast_enh = EnhanceContrast(ROI_image, -20, 45) 

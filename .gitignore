@@ -1,4 +1,1 @@
-
-Smpl_Im/*.jpg
-Thresholded/*.jpg
-**/*.jpg
+__pycache__/*.*
